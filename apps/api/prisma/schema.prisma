@@ -1,0 +1,180 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String                 @id @default(cuid())
+  phoneNumber        String                 @unique @map("phone_number")
+  externalAuthUserId String?                @map("external_auth_user_id")
+  appTokenBalance    Int                    @default(0) @map("app_token_balance")
+  status             UserStatus             @default(active)
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+  lastLoginAt        DateTime?              @map("last_login_at")
+  sessions           UserSession[]
+  redemptions        RedeemCodeRedemption[]
+  ledgerEntries      AppTokenLedger[]
+  conversations      Conversation[]
+  usageRecords       ChatUsageRecord[]
+
+  @@map("users")
+}
+
+model UserSession {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique @map("token_hash")
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+model AdminSession {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("admin_sessions")
+}
+
+model LlmModel {
+  id                    String            @id @default(cuid())
+  displayName           String            @map("display_name")
+  provider              String
+  providerModelId       String            @map("provider_model_id")
+  enabled               Boolean           @default(true)
+  inputAppTokensPer1k   Int               @map("input_app_tokens_per_1k")
+  outputAppTokensPer1k  Int               @map("output_app_tokens_per_1k")
+  minimumRequiredBalance Int              @map("minimum_required_balance")
+  maxOutputTokens       Int               @map("max_output_tokens")
+  contextWindowTokens   Int               @map("context_window_tokens")
+  sortOrder             Int               @default(0) @map("sort_order")
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+  messages              Message[]
+  usageRecords          ChatUsageRecord[]
+
+  @@map("llm_models")
+}
+
+model RedeemCode {
+  id             String                 @id @default(cuid())
+  codeHash       String                 @unique @map("code_hash")
+  appTokenAmount Int                    @map("app_token_amount")
+  usageLimit     Int?                   @map("usage_limit")
+  usedCount      Int                    @default(0) @map("used_count")
+  expiresAt      DateTime?              @map("expires_at")
+  enabled        Boolean                @default(true)
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+  redemptions    RedeemCodeRedemption[]
+
+  @@map("redeem_codes")
+}
+
+model RedeemCodeRedemption {
+  id             String     @id @default(cuid())
+  redeemCodeId   String     @map("redeem_code_id")
+  userId         String     @map("user_id")
+  appTokenAmount Int        @map("app_token_amount")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  redeemCode     RedeemCode @relation(fields: [redeemCodeId], references: [id])
+  user           User       @relation(fields: [userId], references: [id])
+
+  @@unique([redeemCodeId, userId])
+  @@map("redeem_code_redemptions")
+}
+
+model AppTokenLedger {
+  id           String     @id @default(cuid())
+  userId       String     @map("user_id")
+  type         LedgerType
+  amount       Int
+  balanceAfter Int        @map("balance_after")
+  sourceType   String?    @map("source_type")
+  sourceId     String?    @map("source_id")
+  metadata     Json?
+  createdAt    DateTime   @default(now()) @map("created_at")
+  user         User       @relation(fields: [userId], references: [id])
+
+  @@map("app_token_ledger")
+}
+
+model Conversation {
+  id        String            @id @default(cuid())
+  userId    String            @map("user_id")
+  title     String
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+  deletedAt DateTime?         @map("deleted_at")
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  usageRecords ChatUsageRecord[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id             String          @id @default(cuid())
+  conversationId String          @map("conversation_id")
+  role           MessageRole
+  content        String
+  modelId        String?         @map("model_id")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  conversation   Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  model          LlmModel?       @relation(fields: [modelId], references: [id])
+  usageRecord    ChatUsageRecord?
+
+  @@map("messages")
+}
+
+model ChatUsageRecord {
+  id                       String       @id @default(cuid())
+  userId                   String       @map("user_id")
+  conversationId           String       @map("conversation_id")
+  messageId                String       @unique @map("message_id")
+  modelId                  String       @map("model_id")
+  provider                 String
+  providerModelId          String       @map("provider_model_id")
+  promptTokens             Int          @map("prompt_tokens")
+  completionTokens         Int          @map("completion_tokens")
+  totalTokens              Int          @map("total_tokens")
+  inputAppTokensCharged    Int          @map("input_app_tokens_charged")
+  outputAppTokensCharged   Int          @map("output_app_tokens_charged")
+  totalAppTokensCharged    Int          @map("total_app_tokens_charged")
+  openrouterGenerationId   String?      @map("openrouter_generation_id")
+  openrouterCost           Decimal?     @map("openrouter_cost")
+  createdAt                DateTime     @default(now()) @map("created_at")
+  user                     User         @relation(fields: [userId], references: [id])
+  conversation             Conversation @relation(fields: [conversationId], references: [id])
+  message                  Message      @relation(fields: [messageId], references: [id])
+  model                    LlmModel     @relation(fields: [modelId], references: [id])
+
+  @@map("chat_usage_records")
+}
+
+enum UserStatus {
+  active
+  disabled
+}
+
+enum MessageRole {
+  system
+  user
+  assistant
+}
+
+enum LedgerType {
+  redeem
+  chat_usage
+  admin_adjustment
+  refund
+}
