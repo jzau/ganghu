@@ -455,6 +455,13 @@ textarea {
     border-radius: 12px;
     background: #1a1a1a;
     color: #ececec;
+    font-size: 14px;
+    font-weight: 800;
+  }
+
+  .nm-message-avatar.nm-logo-mark {
+    background: #ffffff;
+    color: #1a1a1a;
   }
 
   .nm-message.is-user .nm-message-avatar {
