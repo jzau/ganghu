@@ -32,6 +32,10 @@ V1 modular monolith for GANGHU AI, also named 工夫, with phone OTP login, app-
 
 The mock OTP code is `000000`. If `OPENROUTER_API_KEY` is empty, chat returns a local fallback response while still exercising persistence and billing.
 
+## Deployment
+
+See [Deploy to Debian](docs/deploy-debian.md) for the production setup with PostgreSQL, PM2, Nginx, and HTTPS.
+
 ## Future Clients
 
 The web app uses the same JSON API and shared DTO package intended for future iOS, Android, and desktop clients. Session tokens are set as httpOnly cookies for web and also returned from login endpoints so native clients can store and send them as bearer tokens.

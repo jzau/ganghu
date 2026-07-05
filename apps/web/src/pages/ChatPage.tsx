@@ -1,6 +1,6 @@
 import type { MessageDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Bot, Check, ChevronDown, LogOut, Menu, Plus, Send, Sparkles, Ticket, Trash2, UserRound, Wallet } from "lucide-react";
+import { AlertTriangle, Bot, Check, ChevronDown, Languages, Link2, LogOut, Menu, Plus, Send, Sparkles, Ticket, Trash2, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useNavigate } from "react-router-dom";
@@ -8,10 +8,71 @@ import remarkGfm from "remark-gfm";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { api, endpoints } from "../lib/api";
+import { appNames, commonText, languageLabels, useLanguage, type Language } from "../lib/i18n";
+
+const chatText = {
+  en: {
+    loading: "Loading",
+    closeConversations: "Close conversations",
+    newChat: "New chat",
+    history: "History",
+    openAccountMenu: "Open account menu",
+    openConversations: "Open conversations",
+    selectModel: "Select model",
+    modelsLoading: "Models loading",
+    models: "Models",
+    startConversation: "Start a conversation",
+    emptyHint: "Choose a model and send a message.",
+    thinking: "Assistant is thinking",
+    messagePlaceholder: "Message",
+    sendMessage: "Send message",
+    redeemCode: "Redeem code",
+    code: "Code",
+    addedTokens: (amount: number) => `Added ${amount} app tokens`,
+    chatFailed: "Chat failed",
+    shareConversation: "Share conversation",
+    shareCopied: "Share link copied",
+    shareFailed: "Could not create share link",
+    modelLocked: "Model is locked for this conversation"
+  },
+  zh: {
+    loading: "加载中",
+    closeConversations: "关闭会话列表",
+    newChat: "新建对话",
+    history: "历史记录",
+    openAccountMenu: "打开账户菜单",
+    openConversations: "打开会话列表",
+    selectModel: "选择模型",
+    modelsLoading: "模型加载中",
+    models: "模型",
+    startConversation: "开始对话",
+    emptyHint: "选择模型并发送消息。",
+    thinking: "助手正在思考",
+    messagePlaceholder: "输入消息",
+    sendMessage: "发送消息",
+    redeemCode: "兑换码",
+    code: "兑换码",
+    addedTokens: (amount: number) => `已添加 ${amount} 个应用代币`,
+    chatFailed: "聊天失败",
+    shareConversation: "分享对话",
+    shareCopied: "分享链接已复制",
+    shareFailed: "无法创建分享链接",
+    modelLocked: "此对话已锁定模型"
+  }
+} as const;
+
+const defaultConversationTitles = new Set<string>([chatText.en.newChat, chatText.zh.newChat]);
+
+function conversationTitleForLanguage(title: string, language: Language) {
+  return defaultConversationTitles.has(title) ? chatText[language].newChat : title;
+}
 
 export function ChatPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { language, setLanguage } = useLanguage();
+  const t = chatText[language];
+  const common = commonText[language];
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string>("");
   const [draft, setDraft] = useState("");
@@ -19,10 +80,12 @@ export function ChatPage() {
   const [pendingUserMessage, setPendingUserMessage] = useState<MessageDto | null>(null);
   const [streamingText, setStreamingText] = useState("");
   const [toastMessage, setToastMessage] = useState("");
+  const [toastKind, setToastKind] = useState<"error" | "success">("error");
   const [isSending, setIsSending] = useState(false);
   const [redeemOpen, setRedeemOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
   const me = useQuery({ queryKey: ["me"], queryFn: endpoints.me, retry: false });
   const models = useQuery({ queryKey: ["models"], queryFn: endpoints.models, enabled: me.isSuccess });
@@ -71,9 +134,26 @@ export function ChatPage() {
       : [...base, ...pending];
   }, [activeConversationId, messages.data, modelId, pendingUserMessage, streamingText]);
 
+  const persistedMessages = messages.data?.messages ?? [];
+  const conversationModelId = persistedMessages.find((message) => message.modelId)?.modelId ?? null;
+  const hasPendingMessage =
+    pendingUserMessage &&
+    (!pendingUserMessage.conversationId || pendingUserMessage.conversationId === activeConversationId);
+  const chatHasContent = persistedMessages.length > 0 || Boolean(hasPendingMessage) || Boolean(streamingText);
+  const conversationIsLoading = Boolean(activeConversationId && messages.isLoading);
+  const modelSelectionLocked = conversationIsLoading || chatHasContent;
   const selectedModel = models.data?.models.find((model) => model.id === modelId) ?? models.data?.models[0];
   const balance = me.data?.user.appTokenBalance ?? 0;
   const activeConversation = conversations.data?.conversations.find((conversation) => conversation.id === activeConversationId);
+  const activeConversationTitle = activeConversation ? conversationTitleForLanguage(activeConversation.title, language) : t.startConversation;
+
+  useEffect(() => {
+    if (conversationModelId && modelId !== conversationModelId) setModelId(conversationModelId);
+  }, [conversationModelId, modelId]);
+
+  useEffect(() => {
+    if (modelSelectionLocked) setModelMenuOpen(false);
+  }, [modelSelectionLocked]);
 
   useEffect(() => {
     if (!activeConversationId) return;
@@ -84,7 +164,7 @@ export function ChatPage() {
   }, [activeConversationId, allMessages.length, isSending, streamingText]);
 
   async function sendMessage() {
-    if (!draft.trim() || !modelId || isSending) return;
+    if (!draft.trim() || !modelId || isSending || conversationIsLoading) return;
     const message = draft;
     const optimisticMessage: MessageDto = {
       id: `pending-${Date.now()}`,
@@ -107,10 +187,10 @@ export function ChatPage() {
         body: JSON.stringify({ conversationId: activeConversationId || undefined, modelId, message })
       });
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: "Chat failed" }));
-        throw new Error(error.message ?? "Chat failed");
+        const error = await response.json().catch(() => ({ message: t.chatFailed }));
+        throw new Error(error.message ?? t.chatFailed);
       }
-      if (!response.body) throw new Error("Chat failed");
+      if (!response.body) throw new Error(t.chatFailed);
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -127,7 +207,7 @@ export function ChatPage() {
           if (!event || !dataLine) continue;
           const data = JSON.parse(dataLine.slice(5));
           if (event === "delta") setStreamingText((current) => current + data.content);
-          if (event === "error") throw new Error(data.message ?? "Chat failed");
+          if (event === "error") throw new Error(data.message ?? t.chatFailed);
           if (event === "done") {
             setStreamingText("");
             queryClient.invalidateQueries({ queryKey: ["me"] });
@@ -142,14 +222,15 @@ export function ChatPage() {
       setPendingUserMessage(null);
       setStreamingText("");
       setDraft(message);
-      setToastMessage(error instanceof Error ? error.message : "Chat failed");
+      setToastKind("error");
+      setToastMessage(error instanceof Error ? error.message : t.chatFailed);
     } finally {
       setIsSending(false);
     }
   }
 
   const createConversation = useMutation({
-    mutationFn: () => api<{ conversation: { id: string } }>("/api/conversations", { method: "POST", body: JSON.stringify({ title: "New chat" }) }),
+    mutationFn: () => api<{ conversation: { id: string } }>("/api/conversations", { method: "POST", body: JSON.stringify({ title: chatText.en.newChat }) }),
     onSuccess: (data) => {
       setActiveConversationId(data.conversation.id);
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
@@ -164,28 +245,41 @@ export function ChatPage() {
     }
   });
 
-  if (me.isLoading) return <main className="grid min-h-screen place-items-center bg-[#dcdde3] text-ink">Loading</main>;
+  const shareConversation = useMutation({
+    mutationFn: (id: string) => api<{ token: string }>(`/api/conversations/${id}/share`, { method: "POST" }),
+    onSuccess: async (data) => {
+      const url = `${window.location.origin}/share/${data.token}`;
+      await window.navigator.clipboard?.writeText(url).catch(() => undefined);
+      setToastKind("success");
+      setToastMessage(`${t.shareCopied}: ${url}`);
+    },
+    onError: (error) => {
+      setToastKind("error");
+      setToastMessage(error instanceof Error ? error.message : t.shareFailed);
+    }
+  });
+
+  if (me.isLoading) return <main className="grid min-h-screen place-items-center bg-[#dcdde3] text-ink">{t.loading}</main>;
 
   return (
     <main className="nm-page">
       <div className="nm-shell">
         <div className="nm-layout">
-          {sidebarOpen && <button className="nm-drawer-scrim md:hidden" aria-label="Close conversations" onClick={() => setSidebarOpen(false)} />}
+          {sidebarOpen && <button className="nm-drawer-scrim md:hidden" aria-label={t.closeConversations} onClick={() => setSidebarOpen(false)} />}
           <aside className={`nm-sidebar ${sidebarOpen ? "is-open" : ""}`}>
             <div className="nm-brand">
-              <div className="nm-logo">G</div>
+              <div className="nm-logo nm-logo-mark" aria-hidden="true">⏳</div>
               <div>
-                <div className="nm-title">GANGHU AI</div>
-                <div className="nm-subtitle">工夫</div>
+                <div className="nm-title">{appNames[language]}</div>
               </div>
             </div>
 
             <button className="nm-action" onClick={() => createConversation.mutate()}>
               <Plus size={16} />
-              New chat
+              {t.newChat}
             </button>
 
-            <div className="nm-section-label">History</div>
+            <div className="nm-section-label">{t.history}</div>
             <div className="nm-history">
               {conversations.data?.conversations.map((conversation) => (
                 <button
@@ -197,7 +291,7 @@ export function ChatPage() {
                   }}
                 >
                   <span className="nm-dot" />
-                  <span className="truncate">{conversation.title}</span>
+                  <span className="truncate">{conversationTitleForLanguage(conversation.title, language)}</span>
                   <Trash2
                     size={15}
                     className="ml-auto opacity-0 transition group-hover:opacity-70"
@@ -210,40 +304,91 @@ export function ChatPage() {
               ))}
             </div>
 
-            <div className="nm-account">
-              <div className="nm-avatar-sm" aria-hidden="true">
-                <UserRound size={18} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-bold">{me.data?.user.phoneNumber ?? "Account"}</div>
-                <div className="mt-1 flex items-center gap-2 text-[11px] text-[#808080]">
-                  <span className="nm-badge">PRO</span>
-                  <span>{balance.toLocaleString()} tokens</span>
+            <div className="relative">
+              <button className={`nm-account ${accountMenuOpen ? "is-open" : ""}`} aria-label={t.openAccountMenu} onClick={() => setAccountMenuOpen((open) => !open)}>
+                <div className="nm-avatar-sm" aria-hidden="true">
+                  <UserRound size={18} />
                 </div>
-              </div>
+                <div className="min-w-0 flex-1 text-left">
+                  <div className="truncate text-sm font-bold">{me.data?.user.phoneNumber ?? common.account}</div>
+                  <div className="mt-1 flex items-center gap-2 text-[11px] text-[#808080]">
+                    <span className="nm-badge">PRO</span>
+                    <span>{balance.toLocaleString()} {common.tokens}</span>
+                  </div>
+                </div>
+                <ChevronDown size={15} className="shrink-0 opacity-50" />
+              </button>
+              {accountMenuOpen && (
+                <div className="nm-account-menu">
+                  <button
+                    className="nm-account-menu-item"
+                    onClick={() => {
+                      setRedeemOpen(true);
+                      setAccountMenuOpen(false);
+                    }}
+                  >
+                    <Ticket size={16} />
+                    <span>{common.redeem}</span>
+                  </button>
+                  <div className="nm-account-menu-label">
+                    <Languages size={15} />
+                    <span>{common.language}</span>
+                  </div>
+                  {(["en", "zh"] as Language[]).map((item) => (
+                    <button
+                      key={item}
+                      className={`nm-account-menu-item ${language === item ? "is-active" : ""}`}
+                      onClick={() => {
+                        setLanguage(item);
+                        setAccountMenuOpen(false);
+                      }}
+                    >
+                      <span>{languageLabels[item]}</span>
+                      {language === item && <Check size={16} />}
+                    </button>
+                  ))}
+                  <button
+                    className="nm-account-menu-item"
+                    onClick={async () => {
+                      await api("/api/auth/logout", { method: "POST" });
+                      navigate("/login");
+                    }}
+                  >
+                    <LogOut size={16} />
+                    <span>{common.logout}</span>
+                  </button>
+                </div>
+              )}
             </div>
           </aside>
 
           <section className="nm-chat">
             <header className="nm-chat-header">
-              <button className="nm-icon-button md:hidden" onClick={() => setSidebarOpen(true)} aria-label="Open conversations">
+              <button className="nm-icon-button md:hidden" onClick={() => setSidebarOpen(true)} aria-label={t.openConversations}>
                 <Menu size={18} />
               </button>
 
               <div className="relative min-w-0">
-                <button className={`nm-model-button ${modelMenuOpen ? "is-open" : ""}`} onClick={() => setModelMenuOpen((open) => !open)}>
+                <button
+                  className={`nm-model-button ${modelMenuOpen ? "is-open" : ""}`}
+                  onClick={() => {
+                    if (!modelSelectionLocked) setModelMenuOpen((open) => !open);
+                  }}
+                  disabled={modelSelectionLocked}
+                  title={modelSelectionLocked ? t.modelLocked : t.selectModel}
+                >
                   <span className="nm-model-icon"><Sparkles size={17} /></span>
                   <span className="min-w-0 text-left">
-                    <span className="block truncate text-sm font-bold">{selectedModel?.displayName ?? "Select model"}</span>
+                    <span className="block truncate text-sm font-bold">{selectedModel?.displayName ?? t.selectModel}</span>
                     <span className="block truncate text-[11px] text-[#808080]">
-                      {selectedModel?.providerModelId ?? "Models loading"}
+                      {selectedModel?.providerModelId ?? t.modelsLoading}
                     </span>
                   </span>
                   <ChevronDown size={15} className="shrink-0 opacity-50" />
                 </button>
-                {modelMenuOpen && (
+                {modelMenuOpen && !modelSelectionLocked && (
                   <div className="nm-model-menu">
-                    <div className="nm-section-label px-2">Models</div>
+                    <div className="nm-section-label px-2">{t.models}</div>
                     {models.data?.models.map((model) => (
                       <button
                         key={model.id}
@@ -265,33 +410,24 @@ export function ChatPage() {
                 )}
               </div>
 
-              <div className="ml-auto hidden items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-[#2a2a2a] shadow-nm-in sm:flex">
-                <Wallet size={16} />
-                {balance.toLocaleString()}
-              </div>
-              <Button variant="secondary" onClick={() => setRedeemOpen(true)}>
-                <Ticket size={16} /> Redeem
-              </Button>
-              <Button
-                variant="ghost"
-                className="h-10 w-10 px-0"
-                aria-label="Log out"
-                onClick={async () => {
-                  await api("/api/auth/logout", { method: "POST" });
-                  navigate("/login");
-                }}
+              <button
+                className="nm-icon-button ml-auto"
+                onClick={() => activeConversationId && shareConversation.mutate(activeConversationId)}
+                aria-label={t.shareConversation}
+                title={t.shareConversation}
+                disabled={!activeConversationId || shareConversation.isPending}
               >
-                <LogOut size={17} />
-              </Button>
+                {shareConversation.isPending ? <span className="nm-button-spinner" aria-hidden="true" /> : <Link2 size={18} />}
+              </button>
             </header>
 
             <div className="nm-messages">
               <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
                 {allMessages.length === 0 && (
                   <div className="nm-empty">
-                    <div className="nm-empty-icon"><Bot size={22} /></div>
-                    <div className="font-bold">{activeConversation?.title ?? "Start a conversation"}</div>
-                    <div className="mt-1 text-sm text-[#808080]">Choose a model and send a message.</div>
+                    <div className="nm-empty-icon nm-logo-mark" aria-hidden="true">⏳</div>
+                    <div className="font-bold">{activeConversationTitle}</div>
+                    <div className="mt-1 text-sm text-[#808080]">{t.emptyHint}</div>
                   </div>
                 )}
                 {allMessages.map((message) => (
@@ -303,7 +439,7 @@ export function ChatPage() {
                   </div>
                 ))}
                 {isSending && !streamingText && (
-                  <div className="nm-message is-assistant is-loading" aria-live="polite" aria-label="Assistant is thinking">
+                  <div className="nm-message is-assistant is-loading" aria-live="polite" aria-label={t.thinking}>
                     <div className="nm-message-avatar"><Bot size={15} /></div>
                     <div className="nm-bubble nm-typing">
                       <span />
@@ -322,7 +458,7 @@ export function ChatPage() {
                   className="nm-input"
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
-                  placeholder="Message"
+                  placeholder={t.messagePlaceholder}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
@@ -330,7 +466,7 @@ export function ChatPage() {
                     }
                   }}
                 />
-                <Button className="h-11 w-11 rounded-[14px] px-0" onClick={sendMessage} aria-label="Send message" disabled={!draft.trim() || !modelId || isSending}>
+                <Button className="h-11 w-11 rounded-[14px] px-0" onClick={sendMessage} aria-label={t.sendMessage} disabled={!draft.trim() || !modelId || isSending || conversationIsLoading}>
                   <Send size={18} />
                 </Button>
               </div>
@@ -339,17 +475,17 @@ export function ChatPage() {
         </div>
       </div>
       {toastMessage && (
-        <div className="nm-toast" role="alert" aria-live="polite">
-          <AlertTriangle size={16} />
+        <div className={`nm-toast ${toastKind === "success" ? "is-success" : ""}`} role="alert" aria-live="polite">
+          {toastKind === "success" ? <Check size={16} /> : <AlertTriangle size={16} />}
           <span>{toastMessage}</span>
         </div>
       )}
-      {redeemOpen && <RedeemModal onClose={() => setRedeemOpen(false)} />}
+      {redeemOpen && <RedeemModal language={language} onClose={() => setRedeemOpen(false)} />}
     </main>
   );
 }
 
-function MessageContent({ message }: { message: MessageDto }) {
+export function MessageContent({ message }: { message: MessageDto }) {
   if (message.role !== "assistant") return <>{message.content}</>;
 
   return (
@@ -368,22 +504,24 @@ function MessageContent({ message }: { message: MessageDto }) {
   );
 }
 
-function RedeemModal({ onClose }: { onClose: () => void }) {
+function RedeemModal({ language, onClose }: { language: Language; onClose: () => void }) {
   const queryClient = useQueryClient();
+  const t = chatText[language];
+  const common = commonText[language];
   const [code, setCode] = useState("");
   const [message, setMessage] = useState("");
 
   async function redeem() {
     const result = await api<{ appTokenAmount: number }>("/api/redeem", { method: "POST", body: JSON.stringify({ code }) });
-    setMessage(`Added ${result.appTokenAmount} app tokens`);
+    setMessage(t.addedTokens(result.appTokenAmount));
     queryClient.invalidateQueries({ queryKey: ["me"] });
   }
 
   return (
-    <Modal title="Redeem code" onClose={onClose}>
-      <input className="nm-field mb-3" value={code} onChange={(event) => setCode(event.target.value)} placeholder="Code" />
+    <Modal title={t.redeemCode} onClose={onClose}>
+      <input className="nm-field mb-3" value={code} onChange={(event) => setCode(event.target.value)} placeholder={t.code} />
       {message && <p className="mb-3 text-sm font-semibold text-[#2a2a2a]">{message}</p>}
-      <Button className="w-full" onClick={redeem}>Redeem</Button>
+      <Button className="w-full" onClick={redeem}>{common.redeem}</Button>
     </Modal>
   );
 }

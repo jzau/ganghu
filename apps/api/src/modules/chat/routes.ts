@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { nanoid } from "nanoid";
 import { z } from "zod";
 import { toConversationDto, toMessageDto } from "../../lib/mapper.js";
 import { prisma } from "../../lib/prisma.js";
@@ -10,6 +11,7 @@ const chatSchema = z.object({
   modelId: z.string(),
   message: z.string().min(1).max(12000)
 });
+const defaultConversationTitles = new Set(["New chat", "新建对话"]);
 
 export const chatRoutes: FastifyPluginAsync = async (app) => {
   app.get("/conversations", { preHandler: app.authenticateUser }, async (request) => {
@@ -34,6 +36,41 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     if (!conversation) return reply.code(404).send({ message: "Conversation not found" });
     const messages = await prisma.message.findMany({ where: { conversationId: id }, orderBy: { createdAt: "asc" } });
     return { messages: messages.map(toMessageDto) };
+  });
+
+  app.post("/conversations/:id/share", { preHandler: app.authenticateUser }, async (request, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(request.params);
+    const conversation = await prisma.conversation.findFirst({ where: { id, userId: request.user!.id, deletedAt: null } });
+    if (!conversation) return reply.code(404).send({ message: "Conversation not found" });
+
+    const share = await prisma.conversationShare.upsert({
+      where: { conversationId: id },
+      create: { conversationId: id, token: nanoid(32) },
+      update: {}
+    });
+    return { token: share.token };
+  });
+
+  app.get("/shared/:token", async (request, reply) => {
+    const { token } = z.object({ token: z.string().min(12).max(80) }).parse(request.params);
+    const share = await prisma.conversationShare.findUnique({
+      where: { token },
+      include: { conversation: true }
+    });
+    if (!share || share.conversation.deletedAt) return reply.code(404).send({ message: "Shared conversation not found" });
+
+    const messages = await prisma.message.findMany({
+      where: { conversationId: share.conversationId, role: { in: ["user", "assistant"] } },
+      orderBy: { createdAt: "asc" }
+    });
+    return {
+      share: {
+        token: share.token,
+        conversation: toConversationDto(share.conversation),
+        messages: messages.map(toMessageDto),
+        createdAt: share.createdAt.toISOString()
+      }
+    };
   });
 
   app.delete("/conversations/:id", { preHandler: app.authenticateUser }, async (request, reply) => {
@@ -65,15 +102,25 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         });
     if (!conversation) return reply.code(404).send({ message: "Conversation not found" });
 
+    const conversationModel = await prisma.message.findFirst({
+      where: { conversationId: conversation.id, modelId: { not: null } },
+      orderBy: { createdAt: "asc" },
+      select: { modelId: true }
+    });
+    if (conversationModel?.modelId && conversationModel.modelId !== model.id) {
+      return reply.code(409).send({ message: "Model cannot be changed after a conversation has started" });
+    }
+
     const userMessage = await prisma.message.create({
       data: { conversationId: conversation.id, role: "user", content: input.message, modelId: model.id }
     });
 
     const history = await prisma.message.findMany({
       where: { conversationId: conversation.id },
-      orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
       take: 80
     });
+    history.reverse();
     const llmMessages = trimMessages(
       history.map((message) => ({ role: message.role as LlmChatMessage["role"], content: message.content })),
       model.contextWindowTokens - model.maxOutputTokens
@@ -142,7 +189,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         });
         await tx.conversation.update({
           where: { id: conversation.id },
-          data: { updatedAt: new Date(), title: conversation.title === "New chat" ? input.message.slice(0, 80) : conversation.title }
+          data: { updatedAt: new Date(), title: defaultConversationTitles.has(conversation.title) ? input.message.slice(0, 80) : conversation.title }
         });
         return updated;
       });

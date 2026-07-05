@@ -43,6 +43,13 @@ export interface MessageDto {
   createdAt: string;
 }
 
+export interface ConversationShareDto {
+  token: string;
+  conversation: ConversationDto;
+  messages: MessageDto[];
+  createdAt: string;
+}
+
 export interface ChatUsageDto {
   promptTokens: number;
   completionTokens: number;

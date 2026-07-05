@@ -115,6 +115,12 @@ textarea {
     box-shadow: 3px 3px 6px rgba(160, 160, 160, 0.6), -3px -3px 6px rgba(255, 255, 255, 1);
   }
 
+  .nm-logo-mark {
+    border: 1px solid #1a1a1a;
+    background: #ffffff;
+    color: #1a1a1a;
+  }
+
   .nm-title {
     font-size: 14px;
     font-weight: 800;
@@ -151,6 +157,13 @@ textarea {
   .nm-icon-button:active,
   .nm-model-button.is-open {
     box-shadow: inset 3px 3px 6px rgba(160, 160, 160, 0.6), inset -3px -3px 6px rgba(255, 255, 255, 1);
+  }
+
+  .nm-action:disabled,
+  .nm-icon-button:disabled,
+  .nm-model-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
   }
 
   .nm-section-label {
@@ -217,10 +230,67 @@ textarea {
 
   .nm-account {
     display: flex;
+    width: 100%;
     align-items: center;
     gap: 10px;
+    border: 0;
     border-radius: 14px;
     padding: 10px;
+  }
+
+  .nm-account.is-open {
+    box-shadow: inset 3px 3px 6px rgba(160, 160, 160, 0.6), inset -3px -3px 6px rgba(255, 255, 255, 1);
+  }
+
+  .nm-account-menu {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    z-index: 30;
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    gap: 4px;
+    border-radius: 16px;
+    background: #ececec;
+    padding: 8px;
+    box-shadow: 8px 12px 24px rgba(0, 0, 0, 0.15), 8px 8px 20px rgba(160, 160, 160, 0.6), -6px -6px 16px rgba(255, 255, 255, 1);
+  }
+
+  .nm-account-menu-item,
+  .nm-account-menu-label {
+    display: flex;
+    min-height: 38px;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #2a2a2a;
+    padding: 9px 10px;
+    text-align: left;
+    font-size: 12.5px;
+    font-weight: 800;
+  }
+
+  .nm-account-menu-label {
+    min-height: 30px;
+    color: #808080;
+    font-size: 11px;
+    text-transform: uppercase;
+  }
+
+  .nm-account-menu-item:hover {
+    background: rgba(128, 128, 128, 0.1);
+  }
+
+  .nm-account-menu-item.is-active {
+    box-shadow: inset 3px 3px 6px rgba(160, 160, 160, 0.6), inset -3px -3px 6px rgba(255, 255, 255, 1);
+  }
+
+  .nm-account-menu-item svg:last-child {
+    margin-left: auto;
   }
 
   .nm-avatar-sm,
@@ -253,6 +323,21 @@ textarea {
     letter-spacing: 0.5px;
   }
 
+  .nm-login-language {
+    border: 0;
+    border-radius: 10px;
+    background: #ececec;
+    color: #2a2a2a;
+    padding: 7px 9px;
+    font-size: 12px;
+    font-weight: 800;
+    box-shadow: 3px 3px 6px rgba(160, 160, 160, 0.6), -3px -3px 6px rgba(255, 255, 255, 1);
+  }
+
+  .nm-login-language:active {
+    box-shadow: inset 3px 3px 6px rgba(160, 160, 160, 0.6), inset -3px -3px 6px rgba(255, 255, 255, 1);
+  }
+
   .nm-chat-header {
     display: flex;
     align-items: center;
@@ -268,10 +353,20 @@ textarea {
     border-radius: 12px;
   }
 
+  .nm-button-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(42, 42, 42, 0.18);
+    border-top-color: #2a2a2a;
+    border-radius: 999px;
+    animation: nm-spin 0.7s linear infinite;
+  }
+
   .nm-model-button {
-    display: flex;
+    display: inline-flex;
+    width: fit-content;
     max-width: min(440px, calc(100vw - 180px));
-    min-width: 230px;
+    min-width: 0;
     align-items: center;
     gap: 10px;
     border-radius: 14px;
@@ -291,7 +386,9 @@ textarea {
     left: 0;
     z-index: 30;
     display: flex;
-    width: min(360px, calc(100vw - 40px));
+    width: max-content;
+    min-width: min(260px, calc(100vw - 40px));
+    max-width: min(320px, calc(100vw - 40px));
     max-height: 400px;
     flex-direction: column;
     gap: 3px;
@@ -307,6 +404,7 @@ textarea {
     align-items: center;
     gap: 10px;
     width: 100%;
+    min-width: 0;
     border: 0;
     border-radius: 10px;
     background: transparent;
@@ -521,6 +619,13 @@ textarea {
     border-radius: 16px;
     background: #1a1a1a;
     color: #ececec;
+    font-size: 20px;
+    font-weight: 800;
+  }
+
+  .nm-empty-icon.nm-logo-mark {
+    background: #ffffff;
+    color: #1a1a1a;
   }
 
   .nm-composer-wrap {
@@ -551,6 +656,52 @@ textarea {
 
   .nm-toast svg {
     flex: 0 0 auto;
+  }
+
+  .nm-toast.is-success {
+    border-color: rgba(15, 118, 110, 0.24);
+    background: #0f766e;
+    color: #ecfeff;
+    box-shadow: 0 18px 38px rgba(19, 78, 74, 0.24), 0 4px 10px rgba(19, 78, 74, 0.16);
+  }
+
+  .nm-shared-shell {
+    width: min(1180px, calc(100% - 32px));
+    height: calc(100vh - 32px);
+    margin: 16px auto;
+  }
+
+  .nm-shared-brand {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .nm-shared-title {
+    padding: 0 clamp(8px, 2vw, 32px);
+  }
+
+  .nm-shared-title h1 {
+    overflow-wrap: anywhere;
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1.35;
+  }
+
+  .nm-shared-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    border-radius: 12px;
+    background: #ececec;
+    color: #2a2a2a;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 800;
+    text-decoration: none;
+    box-shadow: 4px 4px 8px rgba(160, 160, 160, 0.6), -4px -4px 8px rgba(255, 255, 255, 1);
   }
 
   .nm-composer {
@@ -622,6 +773,7 @@ textarea {
   .nm-scrollbar::-webkit-scrollbar,
   .nm-history::-webkit-scrollbar,
   .nm-messages::-webkit-scrollbar,
+  .nm-account-menu::-webkit-scrollbar,
   .nm-model-menu::-webkit-scrollbar {
     width: 6px;
   }
@@ -629,6 +781,7 @@ textarea {
   .nm-scrollbar::-webkit-scrollbar-thumb,
   .nm-history::-webkit-scrollbar-thumb,
   .nm-messages::-webkit-scrollbar-thumb,
+  .nm-account-menu::-webkit-scrollbar-thumb,
   .nm-model-menu::-webkit-scrollbar-thumb {
     border-radius: 999px;
     background: rgba(160, 160, 160, 0.75);
@@ -661,6 +814,12 @@ textarea {
     to {
       opacity: 1;
       transform: translate(-50%, 0);
+    }
+  }
+
+  @keyframes nm-spin {
+    to {
+      transform: rotate(360deg);
     }
   }
 

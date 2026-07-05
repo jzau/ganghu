@@ -1,20 +1,45 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MessageSquare } from "lucide-react";
 import { api } from "../lib/api";
+import { appNames, languageLabels, useLanguage } from "../lib/i18n";
 import { Button } from "../components/Button";
 
 const supportedCountries = [
-  { label: "China mainland", code: "+86", hint: "138 0013 8000", pattern: /^1\d{10}$/ },
-  { label: "Hong Kong", code: "+852", hint: "5123 4567", pattern: /^[23569]\d{7}$/ },
-  { label: "Japan", code: "+81", hint: "90 1234 5678", pattern: /^\d{9,10}$/ },
-  { label: "Australia", code: "+61", hint: "412 345 678", pattern: /^\d{9}$/ }
+  { label: { en: "China mainland", zh: "中国大陆" }, code: "+86", hint: "138 0013 8000", pattern: /^1\d{10}$/ },
+  { label: { en: "Hong Kong", zh: "中国香港" }, code: "+852", hint: "5123 4567", pattern: /^[23569]\d{7}$/ },
+  { label: { en: "Japan", zh: "日本" }, code: "+81", hint: "90 1234 5678", pattern: /^\d{9,10}$/ },
+  { label: { en: "Australia", zh: "澳大利亚" }, code: "+61", hint: "412 345 678", pattern: /^\d{9}$/ }
 ] as const;
 
 type CountryCode = (typeof supportedCountries)[number]["code"];
 
+const text = {
+  en: {
+    countryRegion: "Country / region",
+    phoneNumber: "Phone number",
+    otpSent: "OTP sent to",
+    sendOtp: "Send OTP",
+    signIn: "Sign in",
+    invalidPhone: (country: string) => `Enter a valid ${country} phone number.`,
+    failedToSendOtp: "Failed to send OTP",
+    loginFailed: "Login failed"
+  },
+  zh: {
+    countryRegion: "国家 / 地区",
+    phoneNumber: "手机号",
+    otpSent: "验证码已发送至",
+    sendOtp: "发送验证码",
+    signIn: "登录",
+    invalidPhone: (country: string) => `请输入有效的${country}手机号。`,
+    failedToSendOtp: "验证码发送失败",
+    loginFailed: "登录失败"
+  }
+} as const;
+
 export function LoginPage() {
   const navigate = useNavigate();
+  const { language, setLanguage } = useLanguage();
+  const t = text[language];
   const [countryCode, setCountryCode] = useState<CountryCode>("+86");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [otp, setOtp] = useState("");
@@ -27,7 +52,7 @@ export function LoginPage() {
 
   function validatePhoneNumber() {
     if (!country.pattern.test(localPhoneNumber)) {
-      setError(`Enter a valid ${country.label} phone number.`);
+      setError(t.invalidPhone(country.label[language]));
       return false;
     }
     return true;
@@ -44,7 +69,7 @@ export function LoginPage() {
       });
       setStep("otp");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send OTP");
+      setError(err instanceof Error ? err.message : t.failedToSendOtp);
     }
   }
 
@@ -59,7 +84,7 @@ export function LoginPage() {
       });
       navigate("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : t.loginFailed);
     }
   }
 
@@ -68,14 +93,16 @@ export function LoginPage() {
       <section className="nm-card w-full max-w-sm p-5">
         <div className="mb-5 flex items-center gap-3">
           <div className="nm-logo">
-            <MessageSquare size={20} />
+            <span aria-hidden="true">⏳</span>
           </div>
           <div>
-            <h1 className="whitespace-nowrap text-lg font-extrabold">GANGHU AI</h1>
-            <p className="text-sm text-[#808080]">工夫</p>
+            <h1 className="whitespace-nowrap text-lg font-extrabold">{appNames[language]}</h1>
           </div>
+          <button className="nm-login-language ml-auto" onClick={() => setLanguage(language === "en" ? "zh" : "en")}>
+            {languageLabels[language === "en" ? "zh" : "en"]}
+          </button>
         </div>
-        <label className="mb-2 block text-sm font-bold">Country / region</label>
+        <label className="mb-2 block text-sm font-bold">{t.countryRegion}</label>
         <select
           className="nm-field mb-3"
           value={countryCode}
@@ -89,11 +116,11 @@ export function LoginPage() {
         >
           {supportedCountries.map((item) => (
             <option key={item.code} value={item.code}>
-              {item.label} ({item.code})
+              {item.label[language]} ({item.code})
             </option>
           ))}
         </select>
-        <label className="mb-2 block text-sm font-bold">Phone number</label>
+        <label className="mb-2 block text-sm font-bold">{t.phoneNumber}</label>
         <div className="mb-3 flex gap-2">
           <div className="nm-field flex w-20 shrink-0 items-center justify-center px-0 text-sm font-bold">{countryCode}</div>
           <input
@@ -112,7 +139,7 @@ export function LoginPage() {
         </div>
         {step === "otp" && (
           <>
-            <label className="mb-2 block text-sm font-bold">OTP sent to {fullPhoneNumber}</label>
+            <label className="mb-2 block text-sm font-bold">{t.otpSent} {fullPhoneNumber}</label>
             <input
               className="nm-field mb-3"
               inputMode="numeric"
@@ -125,7 +152,7 @@ export function LoginPage() {
         )}
         {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
         <Button className="w-full" onClick={step === "phone" ? requestOtp : verifyOtp}>
-          {step === "phone" ? "Send OTP" : "Sign in"}
+          {step === "phone" ? t.sendOtp : t.signIn}
         </Button>
       </section>
     </main>
