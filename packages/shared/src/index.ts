@@ -19,6 +19,7 @@ export interface LlmModelDto {
   displayName: string;
   provider: string;
   providerModelId: string;
+  logoUrl: string | null;
   enabled: boolean;
   inputAppTokensPer1k: number;
   outputAppTokensPer1k: number;
@@ -31,6 +32,7 @@ export interface LlmModelDto {
 export interface ConversationDto {
   id: string;
   title: string;
+  isDraft: boolean;
   createdAt: string;
   updatedAt: string;
 }

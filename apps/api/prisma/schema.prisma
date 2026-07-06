@@ -51,6 +51,7 @@ model LlmModel {
   displayName           String            @map("display_name")
   provider              String
   providerModelId       String            @map("provider_model_id")
+  logoUrl               String?           @map("logo_url")
   enabled               Boolean           @default(true)
   inputAppTokensPer1k   Int               @map("input_app_tokens_per_1k")
   outputAppTokensPer1k  Int               @map("output_app_tokens_per_1k")

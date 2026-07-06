@@ -17,6 +17,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
   app.get("/conversations", { preHandler: app.authenticateUser }, async (request) => {
     const conversations = await prisma.conversation.findMany({
       where: { userId: request.user!.id, deletedAt: null },
+      include: { _count: { select: { messages: true } } },
       orderBy: { updatedAt: "desc" }
     });
     return { conversations: conversations.map(toConversationDto) };
@@ -24,8 +25,16 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/conversations", { preHandler: app.authenticateUser }, async (request) => {
     const input = createConversationSchema.parse(request.body);
+    const draftConversation = await prisma.conversation.findFirst({
+      where: { userId: request.user!.id, deletedAt: null, messages: { none: {} } },
+      include: { _count: { select: { messages: true } } },
+      orderBy: { updatedAt: "desc" }
+    });
+    if (draftConversation) return { conversation: toConversationDto(draftConversation) };
+
     const conversation = await prisma.conversation.create({
-      data: { userId: request.user!.id, title: input.title ?? "New chat" }
+      data: { userId: request.user!.id, title: input.title ?? "New chat" },
+      include: { _count: { select: { messages: true } } }
     });
     return { conversation: toConversationDto(conversation) };
   });
@@ -97,9 +106,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
 
     const conversation = input.conversationId
       ? await prisma.conversation.findFirst({ where: { id: input.conversationId, userId, deletedAt: null } })
-      : await prisma.conversation.create({
-          data: { userId, title: input.message.slice(0, 80) || "New chat" }
-        });
+      : await findOrCreateDraftConversation(userId, input.message);
     if (!conversation) return reply.code(404).send({ message: "Conversation not found" });
 
     const conversationModel = await prisma.message.findFirst({
@@ -221,6 +228,18 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 };
+
+async function findOrCreateDraftConversation(userId: string, message: string) {
+  const draftConversation = await prisma.conversation.findFirst({
+    where: { userId, deletedAt: null, messages: { none: {} } },
+    orderBy: { updatedAt: "desc" }
+  });
+  if (draftConversation) return draftConversation;
+
+  return prisma.conversation.create({
+    data: { userId, title: message.slice(0, 80) || "New chat" }
+  });
+}
 
 function writeEvent(reply: { raw: NodeJS.WritableStream }, event: string, data: unknown) {
   reply.raw.write(`event: ${event}\n`);

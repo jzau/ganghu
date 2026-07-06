@@ -6,10 +6,26 @@ import { env } from "../../lib/env.js";
 import { toModelDto, toUserDto } from "../../lib/mapper.js";
 import { prisma } from "../../lib/prisma.js";
 
+const logoUrlSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  },
+  z
+    .string()
+    .max(2000)
+    .refine((value) => /^(https?:\/\/|\/|data:image\/)/.test(value), "Logo URL must be an http(s), root-relative, or data:image URL")
+    .nullable()
+    .optional()
+    .default(null)
+);
+
 const modelSchema = z.object({
   displayName: z.string().min(1),
   provider: z.string().min(1).default("openrouter"),
   providerModelId: z.string().min(1),
+  logoUrl: logoUrlSchema,
   enabled: z.boolean().default(true),
   inputAppTokensPer1k: z.number().int().min(0),
   outputAppTokensPer1k: z.number().int().min(0),

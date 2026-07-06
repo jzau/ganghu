@@ -1,6 +1,12 @@
 import type { Conversation, LlmModel, Message, User } from "@prisma/client";
 import type { ApiUser, ConversationDto, LlmModelDto, MessageDto } from "@ai-chat/shared";
 
+type ConversationWithMessageCount = Conversation & {
+  _count?: {
+    messages: number;
+  };
+};
+
 export function toUserDto(user: User): ApiUser {
   return {
     id: user.id,
@@ -21,6 +27,7 @@ export function toModelDto(model: LlmModel): LlmModelDto {
     displayName: model.displayName,
     provider: model.provider,
     providerModelId: model.providerModelId,
+    logoUrl: model.logoUrl,
     enabled: model.enabled,
     inputAppTokensPer1k: model.inputAppTokensPer1k,
     outputAppTokensPer1k: model.outputAppTokensPer1k,
@@ -31,10 +38,11 @@ export function toModelDto(model: LlmModel): LlmModelDto {
   };
 }
 
-export function toConversationDto(conversation: Conversation): ConversationDto {
+export function toConversationDto(conversation: ConversationWithMessageCount): ConversationDto {
   return {
     id: conversation.id,
     title: conversation.title,
+    isDraft: conversation._count?.messages === 0,
     createdAt: conversation.createdAt.toISOString(),
     updatedAt: conversation.updatedAt.toISOString()
   };

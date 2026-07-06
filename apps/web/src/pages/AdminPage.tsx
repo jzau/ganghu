@@ -364,6 +364,7 @@ function ModelsTable({ models }: { models: LlmModelDto[] }) {
             <Th>Display Name</Th>
             <Th>Provider</Th>
             <Th>Provider Model ID</Th>
+            <Th>Logo</Th>
             <Th>Enabled</Th>
             <Th>Input / 1k</Th>
             <Th>Output / 1k</Th>
@@ -381,6 +382,13 @@ function ModelsTable({ models }: { models: LlmModelDto[] }) {
               <Td>{model.displayName}</Td>
               <Td>{model.provider}</Td>
               <Td mono>{model.providerModelId}</Td>
+              <Td>
+                {model.logoUrl ? (
+                  <img className="nm-admin-model-logo" src={model.logoUrl} alt="" />
+                ) : (
+                  <span className="text-xs font-semibold text-[#808080]">Auto</span>
+                )}
+              </Td>
               <Td>{model.enabled ? "Yes" : "No"}</Td>
               <Td>{model.inputAppTokensPer1k.toLocaleString()}</Td>
               <Td>{model.outputAppTokensPer1k.toLocaleString()}</Td>
@@ -407,6 +415,7 @@ function ModelModalForm({ model, onClose }: { model?: LlmModelDto; onClose: () =
     displayName: model?.displayName ?? "",
     provider: model?.provider ?? "openrouter",
     providerModelId: model?.providerModelId ?? "",
+    logoUrl: model?.logoUrl ?? "",
     enabled: model?.enabled ?? true,
     inputAppTokensPer1k: model?.inputAppTokensPer1k ?? 1000,
     outputAppTokensPer1k: model?.outputAppTokensPer1k ?? 2000,
@@ -417,9 +426,13 @@ function ModelModalForm({ model, onClose }: { model?: LlmModelDto; onClose: () =
   });
 
   async function save() {
+    const input = {
+      ...form,
+      logoUrl: form.logoUrl.trim() || null
+    };
     await api(model ? `/api/admin/models/${model.id}` : "/api/admin/models", {
       method: model ? "PATCH" : "POST",
-      body: JSON.stringify(form)
+      body: JSON.stringify(input)
     });
     queryClient.invalidateQueries({ queryKey: ["admin-models"] });
     onClose();
@@ -446,6 +459,12 @@ function ModelFields({ form, setForm }: { form: ModelFormState; setForm: (form: 
       </FormField>
       <FormField help="The exact OpenRouter model slug, for example deepseek/deepseek-chat." label="Provider model ID">
         <input className="nm-field" placeholder="deepseek/deepseek-chat" value={form.providerModelId} onChange={(event) => setForm({ ...form, providerModelId: event.target.value })} />
+      </FormField>
+      <FormField help="Optional logo image shown in the model picker. Use /logos/name.svg, https://..., or a data:image URL." label="Logo URL">
+        <div className="flex items-center gap-3">
+          <input className="nm-field flex-1" placeholder="/logos/deepseek.svg" value={form.logoUrl} onChange={(event) => setForm({ ...form, logoUrl: event.target.value })} />
+          {form.logoUrl.trim() && <img className="nm-admin-model-logo" src={form.logoUrl.trim()} alt="" />}
+        </div>
       </FormField>
       <div className="grid grid-cols-2 gap-3">
         <FormField help="App tokens charged for every 1,000 prompt/input tokens." label="Input app tokens per 1k">
@@ -489,6 +508,7 @@ type ModelFormState = {
   displayName: string;
   provider: string;
   providerModelId: string;
+  logoUrl: string;
   enabled: boolean;
   inputAppTokensPer1k: number;
   outputAppTokensPer1k: number;
