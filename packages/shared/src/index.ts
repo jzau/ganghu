@@ -5,6 +5,7 @@ export type LedgerType = "redeem" | "chat_usage" | "admin_adjustment" | "refund"
 export interface ApiUser {
   id: string;
   phoneNumber: string;
+  displayName: string | null;
   externalAuthUserId: string | null;
   appTokenBalance: number;
   status: UserStatus;

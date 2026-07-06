@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ChevronDown } from "lucide-react";
 import { api } from "../lib/api";
-import { appNames, languageLabels, useLanguage } from "../lib/i18n";
+import { appNames, languageLabels, localizeErrorMessage, useLanguage } from "../lib/i18n";
 import { Button } from "../components/Button";
 
 const supportedCountries = [
@@ -69,7 +70,7 @@ export function LoginPage() {
       });
       setStep("otp");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.failedToSendOtp);
+      setError(localizeErrorMessage(err, language, t.failedToSendOtp));
     }
   }
 
@@ -84,7 +85,7 @@ export function LoginPage() {
       });
       navigate("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.loginFailed);
+      setError(localizeErrorMessage(err, language, t.loginFailed));
     }
   }
 
@@ -92,7 +93,7 @@ export function LoginPage() {
     <main className="grid min-h-screen place-items-center bg-[#dcdde3] p-4 text-[#2a2a2a]">
       <section className="nm-card w-full max-w-sm p-5">
         <div className="mb-5 flex items-center gap-3">
-          <div className="nm-logo">
+          <div className="nm-logo nm-logo-mark">
             <span aria-hidden="true">⏳</span>
           </div>
           <div>
@@ -103,23 +104,26 @@ export function LoginPage() {
           </button>
         </div>
         <label className="mb-2 block text-sm font-bold">{t.countryRegion}</label>
-        <select
-          className="nm-field mb-3"
-          value={countryCode}
-          onChange={(event) => {
-            setCountryCode(event.target.value as CountryCode);
-            setPhoneNumber("");
-            setStep("phone");
-            setOtp("");
-            setError("");
-          }}
-        >
-          {supportedCountries.map((item) => (
-            <option key={item.code} value={item.code}>
-              {item.label[language]} ({item.code})
-            </option>
-          ))}
-        </select>
+        <div className="nm-select-wrap mb-3">
+          <select
+            className="nm-field nm-select-field"
+            value={countryCode}
+            onChange={(event) => {
+              setCountryCode(event.target.value as CountryCode);
+              setPhoneNumber("");
+              setStep("phone");
+              setOtp("");
+              setError("");
+            }}
+          >
+            {supportedCountries.map((item) => (
+              <option key={item.code} value={item.code}>
+                {item.label[language]} ({item.code})
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="nm-select-chevron" size={18} aria-hidden="true" />
+        </div>
         <label className="mb-2 block text-sm font-bold">{t.phoneNumber}</label>
         <div className="mb-3 flex gap-2">
           <div className="nm-field flex w-20 shrink-0 items-center justify-center px-0 text-sm font-bold">{countryCode}</div>

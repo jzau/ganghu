@@ -13,13 +13,14 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: "Request failed" }));
-    throw new Error(error.message ?? "Request failed");
+    throw new Error(error.code ?? error.message ?? "Request failed");
   }
   return response.json() as Promise<T>;
 }
 
 export const endpoints = {
   me: () => api<{ user: ApiUser }>("/api/me"),
+  updateMe: (input: { displayName: string | null }) => api<{ user: ApiUser }>("/api/me", { method: "PATCH", body: JSON.stringify(input) }),
   models: () => api<{ models: LlmModelDto[] }>("/api/models"),
   conversations: () => api<{ conversations: ConversationDto[] }>("/api/conversations"),
   messages: (conversationId: string) => api<{ messages: MessageDto[] }>(`/api/conversations/${conversationId}/messages`),

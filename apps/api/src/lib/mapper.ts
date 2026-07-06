@@ -5,6 +5,7 @@ export function toUserDto(user: User): ApiUser {
   return {
     id: user.id,
     phoneNumber: user.phoneNumber,
+    displayName: user.displayName,
     externalAuthUserId: user.externalAuthUserId,
     appTokenBalance: user.appTokenBalance,
     status: user.status,

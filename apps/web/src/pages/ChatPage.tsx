@@ -1,6 +1,6 @@
-import type { MessageDto } from "@ai-chat/shared";
+import type { ApiUser, MessageDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Bot, Check, ChevronDown, Languages, Link2, LogOut, Menu, Plus, Send, Sparkles, Ticket, Trash2, UserRound } from "lucide-react";
+import { AlertTriangle, Bot, Check, ChevronDown, Languages, Link2, LogOut, Menu, Plus, Send, Sparkles, Ticket, Trash2, UserRound, Wallet } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useNavigate } from "react-router-dom";
@@ -8,7 +8,7 @@ import remarkGfm from "remark-gfm";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { api, endpoints } from "../lib/api";
-import { appNames, commonText, languageLabels, useLanguage, type Language } from "../lib/i18n";
+import { appNames, commonText, languageLabels, localizeErrorMessage, useLanguage, type Language } from "../lib/i18n";
 
 const chatText = {
   en: {
@@ -67,6 +67,12 @@ function conversationTitleForLanguage(title: string, language: Language) {
   return defaultConversationTitles.has(title) ? chatText[language].newChat : title;
 }
 
+function maskPhoneNumber(phoneNumber?: string) {
+  if (!phoneNumber) return "";
+  if (phoneNumber.length <= 6) return phoneNumber;
+  return `${phoneNumber.slice(0, 3)}••••${phoneNumber.slice(-4)}`;
+}
+
 export function ChatPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -83,6 +89,7 @@ export function ChatPage() {
   const [toastKind, setToastKind] = useState<"error" | "success">("error");
   const [isSending, setIsSending] = useState(false);
   const [redeemOpen, setRedeemOpen] = useState(false);
+  const [nameOpen, setNameOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -144,6 +151,7 @@ export function ChatPage() {
   const modelSelectionLocked = conversationIsLoading || chatHasContent;
   const selectedModel = models.data?.models.find((model) => model.id === modelId) ?? models.data?.models[0];
   const balance = me.data?.user.appTokenBalance ?? 0;
+  const accountLabel = me.data?.user.displayName || maskPhoneNumber(me.data?.user.phoneNumber) || common.account;
   const activeConversation = conversations.data?.conversations.find((conversation) => conversation.id === activeConversationId);
   const activeConversationTitle = activeConversation ? conversationTitleForLanguage(activeConversation.title, language) : t.startConversation;
 
@@ -223,7 +231,7 @@ export function ChatPage() {
       setStreamingText("");
       setDraft(message);
       setToastKind("error");
-      setToastMessage(error instanceof Error ? error.message : t.chatFailed);
+      setToastMessage(localizeErrorMessage(error, language, t.chatFailed));
     } finally {
       setIsSending(false);
     }
@@ -255,7 +263,7 @@ export function ChatPage() {
     },
     onError: (error) => {
       setToastKind("error");
-      setToastMessage(error instanceof Error ? error.message : t.shareFailed);
+      setToastMessage(localizeErrorMessage(error, language, t.shareFailed));
     }
   });
 
@@ -310,16 +318,28 @@ export function ChatPage() {
                   <UserRound size={18} />
                 </div>
                 <div className="min-w-0 flex-1 text-left">
-                  <div className="truncate text-sm font-bold">{me.data?.user.phoneNumber ?? common.account}</div>
-                  <div className="mt-1 flex items-center gap-2 text-[11px] text-[#808080]">
-                    <span className="nm-badge">PRO</span>
-                    <span>{balance.toLocaleString()} {common.tokens}</span>
-                  </div>
+                  <div className="truncate text-sm font-bold">{accountLabel}</div>
                 </div>
                 <ChevronDown size={15} className="shrink-0 opacity-50" />
               </button>
               {accountMenuOpen && (
                 <div className="nm-account-menu">
+                  <div className="nm-account-menu-item nm-account-menu-balance">
+                    <Wallet size={16} />
+                    <span>{common.tokens}</span>
+                    <span className="nm-account-menu-value">{balance.toLocaleString()}</span>
+                  </div>
+                  <button
+                    className="nm-account-menu-item"
+                    onClick={() => {
+                      setNameOpen(true);
+                      setAccountMenuOpen(false);
+                    }}
+                  >
+                    <UserRound size={16} />
+                    <span>{common.name}</span>
+                    <span className="nm-account-menu-value">{accountLabel}</span>
+                  </button>
                   <button
                     className="nm-account-menu-item"
                     onClick={() => {
@@ -330,23 +350,17 @@ export function ChatPage() {
                     <Ticket size={16} />
                     <span>{common.redeem}</span>
                   </button>
-                  <div className="nm-account-menu-label">
-                    <Languages size={15} />
+                  <button
+                    className="nm-account-menu-item"
+                    onClick={() => {
+                      setLanguage(language === "en" ? "zh" : "en");
+                      setAccountMenuOpen(false);
+                    }}
+                  >
+                    <Languages size={16} />
                     <span>{common.language}</span>
-                  </div>
-                  {(["en", "zh"] as Language[]).map((item) => (
-                    <button
-                      key={item}
-                      className={`nm-account-menu-item ${language === item ? "is-active" : ""}`}
-                      onClick={() => {
-                        setLanguage(item);
-                        setAccountMenuOpen(false);
-                      }}
-                    >
-                      <span>{languageLabels[item]}</span>
-                      {language === item && <Check size={16} />}
-                    </button>
-                  ))}
+                    <span className="nm-account-menu-value">{languageLabels[language === "en" ? "zh" : "en"]}</span>
+                  </button>
                   <button
                     className="nm-account-menu-item"
                     onClick={async () => {
@@ -375,7 +389,7 @@ export function ChatPage() {
                     if (!modelSelectionLocked) setModelMenuOpen((open) => !open);
                   }}
                   disabled={modelSelectionLocked}
-                  title={modelSelectionLocked ? t.modelLocked : t.selectModel}
+                  title={modelSelectionLocked ? undefined : t.selectModel}
                 >
                   <span className="nm-model-icon"><Sparkles size={17} /></span>
                   <span className="min-w-0 text-left">
@@ -483,6 +497,7 @@ export function ChatPage() {
         </div>
       )}
       {redeemOpen && <RedeemModal language={language} onClose={() => setRedeemOpen(false)} />}
+      {nameOpen && <NameModal language={language} onClose={() => setNameOpen(false)} user={me.data?.user} />}
     </main>
   );
 }
@@ -514,9 +529,13 @@ function RedeemModal({ language, onClose }: { language: Language; onClose: () =>
   const [message, setMessage] = useState("");
 
   async function redeem() {
-    const result = await api<{ appTokenAmount: number }>("/api/redeem", { method: "POST", body: JSON.stringify({ code }) });
-    setMessage(t.addedTokens(result.appTokenAmount));
-    queryClient.invalidateQueries({ queryKey: ["me"] });
+    try {
+      const result = await api<{ appTokenAmount: number }>("/api/redeem", { method: "POST", body: JSON.stringify({ code }) });
+      setMessage(t.addedTokens(result.appTokenAmount));
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+    } catch (error) {
+      setMessage(localizeErrorMessage(error, language, t.chatFailed));
+    }
   }
 
   return (
@@ -524,6 +543,31 @@ function RedeemModal({ language, onClose }: { language: Language; onClose: () =>
       <input className="nm-field mb-3" value={code} onChange={(event) => setCode(event.target.value)} placeholder={t.code} />
       {message && <p className="mb-3 text-sm font-semibold text-[#2a2a2a]">{message}</p>}
       <Button className="w-full" onClick={redeem}>{common.redeem}</Button>
+    </Modal>
+  );
+}
+
+function NameModal({ language, onClose, user }: { language: Language; onClose: () => void; user?: ApiUser }) {
+  const queryClient = useQueryClient();
+  const common = commonText[language];
+  const [displayName, setDisplayName] = useState(user?.displayName ?? "");
+  const [message, setMessage] = useState("");
+
+  async function save() {
+    try {
+      await endpoints.updateMe({ displayName: displayName.trim() || null });
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+      onClose();
+    } catch (error) {
+      setMessage(localizeErrorMessage(error, language, common.account));
+    }
+  }
+
+  return (
+    <Modal title={common.editName} onClose={onClose}>
+      <input className="nm-field mb-3" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={common.name} maxLength={60} />
+      {message && <p className="mb-3 text-sm text-red-600">{message}</p>}
+      <Button className="w-full" onClick={save}>{common.save}</Button>
     </Modal>
   );
 }

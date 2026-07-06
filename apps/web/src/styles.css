@@ -116,7 +116,6 @@ textarea {
   }
 
   .nm-logo-mark {
-    border: 1px solid #1a1a1a;
     background: #ffffff;
     color: #1a1a1a;
   }
@@ -160,10 +159,14 @@ textarea {
   }
 
   .nm-action:disabled,
-  .nm-icon-button:disabled,
-  .nm-model-button:disabled {
+  .nm-icon-button:disabled {
     cursor: not-allowed;
     opacity: 0.5;
+  }
+
+  .nm-model-button:disabled {
+    cursor: default;
+    opacity: 0.72;
   }
 
   .nm-section-label {
@@ -287,6 +290,16 @@ textarea {
 
   .nm-account-menu-item.is-active {
     box-shadow: inset 3px 3px 6px rgba(160, 160, 160, 0.6), inset -3px -3px 6px rgba(255, 255, 255, 1);
+  }
+
+  .nm-account-menu-balance {
+    cursor: default;
+  }
+
+  .nm-account-menu-value {
+    margin-left: auto;
+    color: #808080;
+    font-size: 12px;
   }
 
   .nm-account-menu-item svg:last-child {
@@ -747,6 +760,24 @@ textarea {
     border-radius: 14px;
     padding: 0 14px;
     box-shadow: inset 4px 4px 8px rgba(160, 160, 160, 0.6), inset -4px -4px 8px rgba(255, 255, 255, 1);
+  }
+
+  .nm-select-wrap {
+    position: relative;
+  }
+
+  .nm-select-field {
+    appearance: none;
+    padding-right: 48px;
+  }
+
+  .nm-select-chevron {
+    position: absolute;
+    top: 50%;
+    right: 18px;
+    pointer-events: none;
+    transform: translateY(-50%);
+    color: #555;
   }
 
   .nm-modal-backdrop {

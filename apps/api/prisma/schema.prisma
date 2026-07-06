@@ -10,6 +10,7 @@ datasource db {
 model User {
   id                 String                 @id @default(cuid())
   phoneNumber        String                 @unique @map("phone_number")
+  displayName        String?                @map("display_name")
   externalAuthUserId String?                @map("external_auth_user_id")
   appTokenBalance    Int                    @default(0) @map("app_token_balance")
   status             UserStatus             @default(active)
