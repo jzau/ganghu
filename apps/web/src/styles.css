@@ -131,18 +131,18 @@ textarea {
   }
 
   .nm-brand-title {
-    color: #b6b7bc;
+    color: #f7f7f8;
     font-family: "SF Pro Rounded", "Avenir Next", "Helvetica Neue", Inter, ui-sans-serif, system-ui, sans-serif;
-    font-size: 18px;
-    font-weight: 700;
+    font-size: 15px;
+    font-weight: 500;
     letter-spacing: 0.04em;
     line-height: 0.95;
     margin: 0;
     text-shadow:
-      -1px -1px 1px rgba(90, 90, 90, 0.42),
-      1px 1px 1px rgba(255, 255, 255, 1),
-      0 1px 2px rgba(255, 255, 255, 0.72),
-      0 0 1px rgba(70, 70, 70, 0.24);
+      -1px -1px 1px rgba(112, 112, 112, 0.46),
+      1px 1px 1px rgba(255, 255, 255, 0.9),
+      0 1px 2px rgba(255, 255, 255, 0.62),
+      0 0 1px rgba(92, 92, 92, 0.28);
   }
 
   .nm-brand-wordmark {
@@ -151,14 +151,14 @@ textarea {
 
   .nm-brand-title.is-zh {
     font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "SF Pro Rounded", "Avenir Next", Inter, ui-sans-serif, system-ui, sans-serif;
-    font-size: 20px;
-    font-weight: 700;
+    font-size: 17px;
+    font-weight: 500;
     letter-spacing: 0.08em;
   }
 
   .nm-brand-title.is-en {
-    font-size: 17px;
-    font-weight: 800;
+    font-size: 14px;
+    font-weight: 500;
     letter-spacing: 0.09em;
   }
 
@@ -895,12 +895,36 @@ textarea {
     width: 6px;
   }
 
+  .nm-scrollbar,
+  .nm-history,
+  .nm-messages,
+  .nm-account-menu,
+  .nm-model-menu {
+    scrollbar-color: transparent transparent;
+  }
+
   .nm-scrollbar::-webkit-scrollbar-thumb,
   .nm-history::-webkit-scrollbar-thumb,
   .nm-messages::-webkit-scrollbar-thumb,
   .nm-account-menu::-webkit-scrollbar-thumb,
   .nm-model-menu::-webkit-scrollbar-thumb {
     border-radius: 999px;
+    background: transparent;
+  }
+
+  .nm-scrollbar.is-scrolling,
+  .nm-history.is-scrolling,
+  .nm-messages.is-scrolling,
+  .nm-account-menu.is-scrolling,
+  .nm-model-menu.is-scrolling {
+    scrollbar-color: rgba(160, 160, 160, 0.75) transparent;
+  }
+
+  .nm-scrollbar.is-scrolling::-webkit-scrollbar-thumb,
+  .nm-history.is-scrolling::-webkit-scrollbar-thumb,
+  .nm-messages.is-scrolling::-webkit-scrollbar-thumb,
+  .nm-account-menu.is-scrolling::-webkit-scrollbar-thumb,
+  .nm-model-menu.is-scrolling::-webkit-scrollbar-thumb {
     background: rgba(160, 160, 160, 0.75);
   }
 

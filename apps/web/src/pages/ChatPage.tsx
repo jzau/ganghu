@@ -74,6 +74,7 @@ export function ChatPage() {
   const t = chatText[language];
   const common = commonText[language];
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const scrollHideTimeouts = useRef<Record<string, number>>({});
   const [activeConversationId, setActiveConversationId] = useState<string>("");
   const [draft, setDraft] = useState("");
   const [modelId, setModelId] = useState("");
@@ -87,6 +88,7 @@ export function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [scrollingAreas, setScrollingAreas] = useState<Record<string, boolean>>({});
 
   const me = useQuery({ queryKey: ["me"], queryFn: endpoints.me, retry: false });
   const models = useQuery({ queryKey: ["models"], queryFn: endpoints.models, enabled: me.isSuccess });
@@ -116,6 +118,12 @@ export function ChatPage() {
     const timeoutId = window.setTimeout(() => setToastMessage(""), 4200);
     return () => window.clearTimeout(timeoutId);
   }, [toastMessage]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(scrollHideTimeouts.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
+    };
+  }, []);
 
   const allMessages = useMemo<MessageDto[]>(() => {
     const base = messages.data?.messages ?? [];
@@ -241,6 +249,14 @@ export function ChatPage() {
     }
   }
 
+  function markScrolling(area: string) {
+    window.clearTimeout(scrollHideTimeouts.current[area]);
+    setScrollingAreas((current) => (current[area] ? current : { ...current, [area]: true }));
+    scrollHideTimeouts.current[area] = window.setTimeout(() => {
+      setScrollingAreas((current) => ({ ...current, [area]: false }));
+    }, 850);
+  }
+
   const createConversation = useMutation({
     mutationFn: () => api<{ conversation: { id: string } }>("/api/conversations", { method: "POST", body: JSON.stringify({ title: chatText.en.newChat }) }),
     onSuccess: (data) => {
@@ -294,7 +310,7 @@ export function ChatPage() {
             </button>
 
             <div className="nm-section-label">{t.history}</div>
-            <div className="nm-history">
+            <div className={`nm-history ${scrollingAreas.history ? "is-scrolling" : ""}`} onScroll={() => markScrolling("history")}>
               {conversations.data?.conversations.map((conversation) => (
                 <button
                   key={conversation.id}
@@ -329,7 +345,7 @@ export function ChatPage() {
                 <ChevronUp size={15} className="shrink-0 opacity-50" />
               </button>
               {accountMenuOpen && (
-                <div className="nm-account-menu">
+                <div className={`nm-account-menu ${scrollingAreas.accountMenu ? "is-scrolling" : ""}`} onScroll={() => markScrolling("accountMenu")}>
                   <div className="nm-account-menu-item nm-account-menu-info">
                     <UserRound size={16} />
                     <span>{common.account}</span>
@@ -396,7 +412,7 @@ export function ChatPage() {
                   {!modelSelectionLocked && <ChevronDown size={15} className="shrink-0 opacity-50" />}
                 </button>
                 {modelMenuOpen && !modelSelectionLocked && (
-                  <div className="nm-model-menu">
+                  <div className={`nm-model-menu ${scrollingAreas.modelMenu ? "is-scrolling" : ""}`} onScroll={() => markScrolling("modelMenu")}>
                     <div className="nm-section-label px-2">{t.models}</div>
                     {models.data?.models.map((model) => (
                       <button
@@ -430,7 +446,7 @@ export function ChatPage() {
               </button>
             </header>
 
-            <div className="nm-messages">
+            <div className={`nm-messages ${scrollingAreas.messages ? "is-scrolling" : ""}`} onScroll={() => markScrolling("messages")}>
               <div className="nm-message-column">
                 {allMessages.length === 0 && (
                   <div className="nm-empty">
