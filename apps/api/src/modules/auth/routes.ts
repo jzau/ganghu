@@ -7,6 +7,7 @@ import { toUserDto } from "../../lib/mapper.js";
 import { authServiceClient } from "./authServiceClient.js";
 
 const countryCodes = ["+86", "+852", "+81", "+61"] as const;
+const initialAppTokenBalance = 10_000;
 const phoneSchema = z.object({
   countryCode: z.enum(countryCodes).optional(),
   phoneNumber: z.string().min(4).max(32)
@@ -83,6 +84,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       create: {
         phoneNumber,
         externalAuthUserId,
+        appTokenBalance: initialAppTokenBalance,
         lastLoginAt: new Date()
       },
       update: { externalAuthUserId, lastLoginAt: new Date() }

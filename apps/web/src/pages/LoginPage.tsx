@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
 import { api } from "../lib/api";
-import { appNames, languageLabels, localizeErrorMessage, useLanguage } from "../lib/i18n";
+import { languageLabels, localizeErrorMessage, useLanguage } from "../lib/i18n";
 import { Button } from "../components/Button";
 
 const supportedCountries = [
@@ -96,8 +96,10 @@ export function LoginPage() {
           <div className="nm-logo nm-logo-mark">
             <span aria-hidden="true">⏳</span>
           </div>
-          <div>
-            <h1 className="whitespace-nowrap text-lg font-extrabold">{appNames[language]}</h1>
+          <div className="nm-brand-wordmark">
+            <h1 className={`nm-brand-title ${language === "zh" ? "is-zh" : "is-en"}`}>
+              {language === "zh" ? "工夫AI" : "GANGHU AI"}
+            </h1>
           </div>
           <button className="nm-login-language ml-auto" onClick={() => setLanguage(language === "en" ? "zh" : "en")}>
             {languageLabels[language === "en" ? "zh" : "en"]}

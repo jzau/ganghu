@@ -1,6 +1,6 @@
-import type { ApiUser, MessageDto } from "@ai-chat/shared";
+import type { MessageDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Bot, Check, ChevronDown, Languages, Link2, LogOut, Menu, Plus, Send, Sparkles, Ticket, Trash2, UserRound, Wallet } from "lucide-react";
+import { AlertTriangle, Bot, Check, ChevronDown, ChevronUp, Languages, LogOut, Menu, Plus, Send, Sparkles, Ticket, Trash2, Upload, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useNavigate } from "react-router-dom";
@@ -8,7 +8,7 @@ import remarkGfm from "remark-gfm";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { api, endpoints } from "../lib/api";
-import { appNames, commonText, languageLabels, localizeErrorMessage, useLanguage, type Language } from "../lib/i18n";
+import { commonText, languageLabels, localizeErrorMessage, useLanguage, type Language } from "../lib/i18n";
 
 const chatText = {
   en: {
@@ -67,12 +67,6 @@ function conversationTitleForLanguage(title: string, language: Language) {
   return defaultConversationTitles.has(title) ? chatText[language].newChat : title;
 }
 
-function maskPhoneNumber(phoneNumber?: string) {
-  if (!phoneNumber) return "";
-  if (phoneNumber.length <= 6) return phoneNumber;
-  return `${phoneNumber.slice(0, 3)}••••${phoneNumber.slice(-4)}`;
-}
-
 export function ChatPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -84,12 +78,12 @@ export function ChatPage() {
   const [draft, setDraft] = useState("");
   const [modelId, setModelId] = useState("");
   const [pendingUserMessage, setPendingUserMessage] = useState<MessageDto | null>(null);
+  const [completedAssistantMessage, setCompletedAssistantMessage] = useState<MessageDto | null>(null);
   const [streamingText, setStreamingText] = useState("");
   const [toastMessage, setToastMessage] = useState("");
   const [toastKind, setToastKind] = useState<"error" | "success">("error");
   const [isSending, setIsSending] = useState(false);
   const [redeemOpen, setRedeemOpen] = useState(false);
-  const [nameOpen, setNameOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
@@ -136,10 +130,17 @@ export function ChatPage() {
       )
         ? [pendingUserMessage]
         : [];
-    return streamingText
-      ? [...base, ...pending, { id: "streaming", conversationId: activeConversationId, role: "assistant", content: streamingText, modelId, createdAt: new Date().toISOString() }]
-      : [...base, ...pending];
-  }, [activeConversationId, messages.data, modelId, pendingUserMessage, streamingText]);
+    const completed =
+      completedAssistantMessage &&
+      completedAssistantMessage.conversationId === activeConversationId &&
+      !base.some((message) => message.id === completedAssistantMessage.id)
+        ? [completedAssistantMessage]
+        : [];
+    if (streamingText) {
+      return [...base, ...pending, { id: "streaming", conversationId: activeConversationId, role: "assistant", content: streamingText, modelId, createdAt: new Date().toISOString() }];
+    }
+    return [...base, ...pending, ...completed];
+  }, [activeConversationId, completedAssistantMessage, messages.data, modelId, pendingUserMessage, streamingText]);
 
   const persistedMessages = messages.data?.messages ?? [];
   const conversationModelId = persistedMessages.find((message) => message.modelId)?.modelId ?? null;
@@ -151,7 +152,7 @@ export function ChatPage() {
   const modelSelectionLocked = conversationIsLoading || chatHasContent;
   const selectedModel = models.data?.models.find((model) => model.id === modelId) ?? models.data?.models[0];
   const balance = me.data?.user.appTokenBalance ?? 0;
-  const accountLabel = me.data?.user.displayName || maskPhoneNumber(me.data?.user.phoneNumber) || common.account;
+  const phoneNumber = me.data?.user.phoneNumber ?? "";
   const activeConversation = conversations.data?.conversations.find((conversation) => conversation.id === activeConversationId);
   const activeConversationTitle = activeConversation ? conversationTitleForLanguage(activeConversation.title, language) : t.startConversation;
 
@@ -169,7 +170,7 @@ export function ChatPage() {
       messagesEndRef.current?.scrollIntoView({ block: "end" });
     });
     return () => window.cancelAnimationFrame(frameId);
-  }, [activeConversationId, allMessages.length, isSending, streamingText]);
+  }, [activeConversationId, allMessages.length, streamingText]);
 
   async function sendMessage() {
     if (!draft.trim() || !modelId || isSending || conversationIsLoading) return;
@@ -184,6 +185,7 @@ export function ChatPage() {
     };
     setDraft("");
     setPendingUserMessage(optimisticMessage);
+    setCompletedAssistantMessage(null);
     setStreamingText("");
     setToastMessage("");
     setIsSending(true);
@@ -217,7 +219,9 @@ export function ChatPage() {
           if (event === "delta") setStreamingText((current) => current + data.content);
           if (event === "error") throw new Error(data.message ?? t.chatFailed);
           if (event === "done") {
+            setCompletedAssistantMessage(data.message);
             setStreamingText("");
+            setIsSending(false);
             queryClient.invalidateQueries({ queryKey: ["me"] });
             queryClient.invalidateQueries({ queryKey: ["conversations"] });
             setPendingUserMessage((pending) => pending ? { ...pending, conversationId: data.message.conversationId } : pending);
@@ -277,8 +281,10 @@ export function ChatPage() {
           <aside className={`nm-sidebar ${sidebarOpen ? "is-open" : ""}`}>
             <div className="nm-brand">
               <div className="nm-logo nm-logo-mark" aria-hidden="true">⏳</div>
-              <div>
-                <div className="nm-title">{appNames[language]}</div>
+              <div className="nm-brand-wordmark">
+                <div className={`nm-brand-title ${language === "zh" ? "is-zh" : "is-en"}`}>
+                  {language === "zh" ? "工夫AI" : "GANGHU AI"}
+                </div>
               </div>
             </div>
 
@@ -318,28 +324,17 @@ export function ChatPage() {
                   <UserRound size={18} />
                 </div>
                 <div className="min-w-0 flex-1 text-left">
-                  <div className="truncate text-sm font-bold">{accountLabel}</div>
+                  <div className="truncate text-sm font-bold">{balance.toLocaleString()} {common.tokens}</div>
                 </div>
-                <ChevronDown size={15} className="shrink-0 opacity-50" />
+                <ChevronUp size={15} className="shrink-0 opacity-50" />
               </button>
               {accountMenuOpen && (
                 <div className="nm-account-menu">
-                  <div className="nm-account-menu-item nm-account-menu-balance">
-                    <Wallet size={16} />
-                    <span>{common.tokens}</span>
-                    <span className="nm-account-menu-value">{balance.toLocaleString()}</span>
-                  </div>
-                  <button
-                    className="nm-account-menu-item"
-                    onClick={() => {
-                      setNameOpen(true);
-                      setAccountMenuOpen(false);
-                    }}
-                  >
+                  <div className="nm-account-menu-item nm-account-menu-info">
                     <UserRound size={16} />
-                    <span>{common.name}</span>
-                    <span className="nm-account-menu-value">{accountLabel}</span>
-                  </button>
+                    <span>{common.account}</span>
+                    <span className="nm-account-menu-value">{phoneNumber}</span>
+                  </div>
                   <button
                     className="nm-account-menu-item"
                     onClick={() => {
@@ -398,7 +393,7 @@ export function ChatPage() {
                       {selectedModel?.providerModelId ?? t.modelsLoading}
                     </span>
                   </span>
-                  <ChevronDown size={15} className="shrink-0 opacity-50" />
+                  {!modelSelectionLocked && <ChevronDown size={15} className="shrink-0 opacity-50" />}
                 </button>
                 {modelMenuOpen && !modelSelectionLocked && (
                   <div className="nm-model-menu">
@@ -431,7 +426,7 @@ export function ChatPage() {
                 title={t.shareConversation}
                 disabled={!activeConversationId || shareConversation.isPending}
               >
-                {shareConversation.isPending ? <span className="nm-button-spinner" aria-hidden="true" /> : <Link2 size={18} />}
+                {shareConversation.isPending ? <span className="nm-button-spinner" aria-hidden="true" /> : <Upload size={18} />}
               </button>
             </header>
 
@@ -454,7 +449,7 @@ export function ChatPage() {
                     </div>
                   </div>
                 ))}
-                {isSending && !streamingText && (
+                {isSending && !streamingText && !completedAssistantMessage && (
                   <div className="nm-message is-assistant is-loading" aria-live="polite" aria-label={t.thinking}>
                     <div className="nm-message-avatar nm-logo-mark" aria-hidden="true">⏳</div>
                     <div className="nm-bubble nm-typing">
@@ -482,8 +477,8 @@ export function ChatPage() {
                     }
                   }}
                 />
-                <Button className="nm-send-button h-10 w-10 rounded-[13px] px-0" onClick={sendMessage} aria-label={t.sendMessage} disabled={!draft.trim() || !modelId || isSending || conversationIsLoading}>
-                  <Send size={18} />
+                <Button className="nm-send-button px-0" onClick={sendMessage} aria-label={t.sendMessage} disabled={!draft.trim() || !modelId || isSending || conversationIsLoading}>
+                  <Send size={20} />
                 </Button>
               </div>
             </footer>
@@ -497,7 +492,6 @@ export function ChatPage() {
         </div>
       )}
       {redeemOpen && <RedeemModal language={language} onClose={() => setRedeemOpen(false)} />}
-      {nameOpen && <NameModal language={language} onClose={() => setNameOpen(false)} user={me.data?.user} />}
     </main>
   );
 }
@@ -539,35 +533,10 @@ function RedeemModal({ language, onClose }: { language: Language; onClose: () =>
   }
 
   return (
-    <Modal title={t.redeemCode} onClose={onClose}>
+    <Modal title={t.redeemCode} className="nm-redeem-modal" onClose={onClose}>
       <input className="nm-field mb-3" value={code} onChange={(event) => setCode(event.target.value)} placeholder={t.code} />
       {message && <p className="mb-3 text-sm font-semibold text-[#2a2a2a]">{message}</p>}
       <Button className="w-full" onClick={redeem}>{common.redeem}</Button>
-    </Modal>
-  );
-}
-
-function NameModal({ language, onClose, user }: { language: Language; onClose: () => void; user?: ApiUser }) {
-  const queryClient = useQueryClient();
-  const common = commonText[language];
-  const [displayName, setDisplayName] = useState(user?.displayName ?? "");
-  const [message, setMessage] = useState("");
-
-  async function save() {
-    try {
-      await endpoints.updateMe({ displayName: displayName.trim() || null });
-      queryClient.invalidateQueries({ queryKey: ["me"] });
-      onClose();
-    } catch (error) {
-      setMessage(localizeErrorMessage(error, language, common.account));
-    }
-  }
-
-  return (
-    <Modal title={common.editName} onClose={onClose}>
-      <input className="nm-field mb-3" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={common.name} maxLength={60} />
-      {message && <p className="mb-3 text-sm text-red-600">{message}</p>}
-      <Button className="w-full" onClick={save}>{common.save}</Button>
     </Modal>
   );
 }
