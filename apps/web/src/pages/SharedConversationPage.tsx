@@ -69,7 +69,7 @@ export function SharedConversationPage() {
           </div>
 
           <div className="nm-messages">
-            <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+            <div className="nm-message-column">
               {messages.length === 0 && (
                 <div className="nm-empty">
                   <div className="nm-empty-icon nm-logo-mark" aria-hidden="true">⏳</div>

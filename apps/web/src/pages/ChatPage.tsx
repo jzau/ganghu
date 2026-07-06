@@ -436,7 +436,7 @@ export function ChatPage() {
             </header>
 
             <div className="nm-messages">
-              <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+              <div className="nm-message-column">
                 {allMessages.length === 0 && (
                   <div className="nm-empty">
                     <div className="nm-empty-icon nm-logo-mark" aria-hidden="true">⏳</div>
@@ -482,7 +482,7 @@ export function ChatPage() {
                     }
                   }}
                 />
-                <Button className="h-11 w-11 rounded-[14px] px-0" onClick={sendMessage} aria-label={t.sendMessage} disabled={!draft.trim() || !modelId || isSending || conversationIsLoading}>
+                <Button className="nm-send-button h-10 w-10 rounded-[13px] px-0" onClick={sendMessage} aria-label={t.sendMessage} disabled={!draft.trim() || !modelId || isSending || conversationIsLoading}>
                   <Send size={18} />
                 </Button>
               </div>
