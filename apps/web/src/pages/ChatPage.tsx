@@ -457,9 +457,6 @@ export function ChatPage() {
                 )}
                 {allMessages.map((message) => (
                   <div key={message.id} className={`nm-message ${message.role === "user" ? "is-user" : "is-assistant"}`}>
-                    <div className={`nm-message-avatar ${message.role === "assistant" ? "nm-logo-mark" : ""}`}>
-                      {message.role === "user" ? <UserRound size={15} /> : <span aria-hidden="true">⏳</span>}
-                    </div>
                     <div className="nm-bubble">
                       <MessageContent message={message} />
                     </div>
@@ -467,7 +464,6 @@ export function ChatPage() {
                 ))}
                 {isSending && !streamingText && !completedAssistantMessage && (
                   <div className="nm-message is-assistant is-loading" aria-live="polite" aria-label={t.thinking}>
-                    <div className="nm-message-avatar nm-logo-mark" aria-hidden="true">⏳</div>
                     <div className="nm-bubble nm-typing">
                       <span />
                       <span />

@@ -356,7 +356,6 @@ textarea {
   }
 
   .nm-avatar-sm,
-  .nm-message-avatar,
   .nm-empty-icon,
   .nm-model-icon {
     display: grid;
@@ -506,7 +505,7 @@ textarea {
     max-width: 50rem;
     margin: 0 auto;
     flex-direction: column;
-    gap: 16px;
+    gap: 24px;
   }
 
   .nm-message {
@@ -519,26 +518,6 @@ textarea {
   .nm-message.is-user {
     align-self: flex-end;
     flex-direction: row-reverse;
-  }
-
-  .nm-message-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 12px;
-    background: #1a1a1a;
-    color: #ececec;
-    font-size: 14px;
-    font-weight: 800;
-  }
-
-  .nm-message-avatar.nm-logo-mark {
-    background: #ffffff;
-    color: #1a1a1a;
-  }
-
-  .nm-message.is-user .nm-message-avatar {
-    background: #ececec;
-    color: #1a1a1a;
   }
 
   .nm-bubble {

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link2, UserRound } from "lucide-react";
+import { Link2 } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { MessageContent } from "./ChatPage";
 import { endpoints } from "../lib/api";
@@ -78,9 +78,6 @@ export function SharedConversationPage() {
               )}
               {messages.map((message) => (
                 <div key={message.id} className={`nm-message ${message.role === "user" ? "is-user" : "is-assistant"}`}>
-                  <div className={`nm-message-avatar ${message.role === "assistant" ? "nm-logo-mark" : ""}`}>
-                    {message.role === "user" ? <UserRound size={15} /> : <span aria-hidden="true">⏳</span>}
-                  </div>
                   <div className="nm-bubble">
                     <MessageContent message={message} />
                   </div>
