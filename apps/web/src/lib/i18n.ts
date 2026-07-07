@@ -6,7 +6,7 @@ const languageKey = "ganghu-language";
 
 export const appNames: Record<Language, string> = {
   en: "GANGHU AI",
-  zh: "工夫AI"
+  zh: "工夫 AI"
 };
 
 export const languageLabels: Record<Language, string> = {

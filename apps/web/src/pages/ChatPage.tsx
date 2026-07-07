@@ -469,7 +469,7 @@ export function ChatPage() {
               ))}
             </div>
 
-            <div className="relative" ref={accountMenuRef}>
+            <div className="nm-account-anchor relative" ref={accountMenuRef}>
               <button
                 className={`nm-account ${accountMenuOpen ? "is-open" : ""}`}
                 aria-label={t.openAccountMenu}

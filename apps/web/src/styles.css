@@ -238,13 +238,17 @@ textarea {
   .nm-action {
     display: flex;
     flex: 0 0 auto;
+    width: 100%;
+    min-height: 40px;
     align-items: center;
     justify-content: center;
     gap: 8px;
     border-radius: 14px;
+    overflow: hidden;
     padding: 10px;
     font-size: 12.5px;
     font-weight: 700;
+    transition: width 0.2s ease, height 0.2s ease, min-height 0.2s ease, padding 0.2s ease, border-radius 0.2s ease, gap 0.2s ease, transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
   }
 
   .nm-action-label,
@@ -254,6 +258,21 @@ textarea {
   .nm-section-label,
   .nm-history {
     transition: opacity 0.16s ease, max-width 0.2s ease, transform 0.2s ease;
+  }
+
+  .nm-action-label,
+  .nm-account-label {
+    max-width: 180px;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .nm-account-label {
+    padding-right: 0;
+  }
+
+  .nm-account-menu-icon {
+    max-width: 15px;
   }
 
   .nm-action:active,
@@ -323,14 +342,30 @@ textarea {
   }
 
   .nm-account {
+    position: relative;
     display: flex;
     flex: 0 0 auto;
     width: 100%;
+    min-height: 56px;
     align-items: center;
     gap: 10px;
     border: 0;
     border-radius: 14px;
-    padding: 10px;
+    overflow: hidden;
+    padding: 10px 10px 10px 56px;
+    transition: width 0.2s ease, height 0.2s ease, min-height 0.2s ease, padding 0.2s ease, border-radius 0.2s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  }
+
+  .nm-account-anchor {
+    transition: margin-left 0.2s ease, margin-bottom 0.2s ease;
+  }
+
+  .nm-account .nm-avatar-sm {
+    position: absolute;
+    top: 50%;
+    left: 10px;
+    transform: translateY(-50%);
+    transition: left 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
   }
 
   .nm-account.is-open {
@@ -627,7 +662,7 @@ textarea {
     width: max-content;
     min-width: min(260px, calc(100vw - 40px));
     max-width: min(320px, calc(100vw - 40px));
-    max-height: 400px;
+    max-height: min(560px, calc(100dvh - 96px));
     flex-direction: column;
     gap: 3px;
     overflow: auto;
@@ -1153,18 +1188,20 @@ textarea {
 
   @media (min-width: 768px) {
     .nm-layout.is-sidebar-collapsed {
-      grid-template-columns: 64px minmax(0, 1fr);
+      grid-template-columns: 80px minmax(0, 1fr);
       gap: 14px;
     }
 
     .nm-layout.is-sidebar-collapsed .nm-sidebar {
-      align-items: center;
+      align-items: flex-start;
       overflow: visible;
-      padding: 12px;
+      padding: 16px 0;
     }
 
     .nm-layout.is-sidebar-collapsed .nm-sidebar-top {
       width: 40px;
+      margin-left: 20px;
+      gap: 0;
       justify-content: center;
     }
 
@@ -1182,6 +1219,11 @@ textarea {
       overflow: hidden;
     }
 
+    .nm-layout.is-sidebar-collapsed .nm-sidebar-brand {
+      flex: 0 0 0;
+      padding: 0;
+    }
+
     .nm-layout.is-sidebar-collapsed .nm-section-label {
       height: 0;
       padding: 0;
@@ -1195,10 +1237,20 @@ textarea {
     .nm-layout.is-sidebar-collapsed .nm-account {
       width: 40px;
       height: 40px;
+      min-height: 40px;
       justify-content: center;
       gap: 0;
       padding: 0;
       border-radius: 12px;
+    }
+
+    .nm-layout.is-sidebar-collapsed .nm-account .nm-avatar-sm {
+      left: 2px;
+    }
+
+    .nm-layout.is-sidebar-collapsed .nm-action,
+    .nm-layout.is-sidebar-collapsed .nm-account-anchor {
+      margin-left: 20px;
     }
 
     .nm-layout.is-sidebar-collapsed .nm-action-label,
@@ -1210,14 +1262,15 @@ textarea {
       transform: translateX(-6px);
     }
 
-    .nm-layout.is-sidebar-collapsed .nm-sidebar > .relative {
+    .nm-layout.is-sidebar-collapsed .nm-account-anchor {
       width: 40px;
       margin-top: auto;
+      margin-bottom: 12px;
     }
 
     .nm-layout.is-sidebar-collapsed .nm-account-menu {
       bottom: calc(100% + 8px);
-      left: 0;
+      left: -14px;
       width: min(250px, calc(100vw - 28px));
       max-height: min(320px, calc(100dvh - 96px));
     }
