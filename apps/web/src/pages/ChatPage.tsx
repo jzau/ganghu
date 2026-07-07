@@ -434,7 +434,10 @@ export function ChatPage() {
                 aria-label={sidebarCollapsed ? t.reopenSidebar : t.collapseSidebar}
                 title={sidebarCollapsed ? t.reopenSidebar : t.collapseSidebar}
               >
-                {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+                {sidebarCollapsed && <span className="nm-sidebar-toggle-logo" aria-hidden="true">⏳</span>}
+                <span className="nm-sidebar-toggle-icon" aria-hidden="true">
+                  {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+                </span>
               </button>
             </div>
 
