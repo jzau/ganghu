@@ -567,7 +567,7 @@ export function ChatPage() {
               </div>
 
               <button
-                className="nm-icon-button ml-auto"
+                className="nm-icon-button nm-share-button ml-auto"
                 onClick={() => {
                   if (!shareDisabled) shareConversation.mutate(activeConversationId);
                 }}
@@ -630,7 +630,7 @@ export function ChatPage() {
                     }
                   }}
                 />
-                <Button className="nm-send-button px-0" onClick={sendMessage} aria-label={t.sendMessage} disabled={!draft.trim() || !modelId || isSending || conversationIsLoading}>
+                <Button className="nm-send-button px-0 disabled:!cursor-default" onClick={sendMessage} aria-label={t.sendMessage} disabled={!draft.trim() || !modelId || isSending || conversationIsLoading}>
                   <Send size={20} />
                 </Button>
               </div>

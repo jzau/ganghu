@@ -287,6 +287,10 @@ textarea {
     opacity: 0.5;
   }
 
+  .nm-share-button:disabled {
+    cursor: default;
+  }
+
   .nm-model-button:disabled {
     cursor: default;
     opacity: 0.72;
@@ -668,10 +672,9 @@ textarea {
     width: max-content;
     min-width: min(260px, calc(100vw - 40px));
     max-width: min(320px, calc(100vw - 40px));
-    max-height: min(560px, calc(100dvh - 96px));
     flex-direction: column;
     gap: 3px;
-    overflow: auto;
+    overflow: visible;
     border-radius: 16px;
     background: #ececec;
     padding: 8px;
