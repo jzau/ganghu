@@ -2,8 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Link2 } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { MessageContent } from "./ChatPage";
+import { BrandLockup } from "../components/BrandLockup";
 import { endpoints } from "../lib/api";
-import { appNames, useLanguage } from "../lib/i18n";
+import { useLanguage } from "../lib/i18n";
 
 const sharedText = {
   en: {
@@ -56,9 +57,8 @@ export function SharedConversationPage() {
         <section className="nm-chat">
           <header className="nm-chat-header">
             <div className="nm-shared-brand">
-              <div className="nm-logo nm-logo-mark" aria-hidden="true">⏳</div>
+              <BrandLockup language={language} />
               <div className="min-w-0">
-                <div className="nm-title">{appNames[language]}</div>
                 <div className="nm-subtitle">{t.sharedConversation}</div>
               </div>
             </div>

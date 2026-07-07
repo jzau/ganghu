@@ -70,6 +70,7 @@ textarea {
     height: 100%;
     box-sizing: border-box;
     padding: 20px;
+    transition: grid-template-columns 0.2s ease;
   }
 
   .nm-sidebar,
@@ -87,6 +88,7 @@ textarea {
     gap: 12px;
     overflow: visible;
     padding: 16px 12px;
+    transition: padding 0.2s ease, border-radius 0.2s ease, box-shadow 0.2s ease;
   }
 
   .nm-chat {
@@ -103,8 +105,63 @@ textarea {
     display: flex;
     flex: 0 0 auto;
     align-items: center;
+    padding: 2px;
+  }
+
+  .nm-sidebar-top {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nm-sidebar-top .nm-brand {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .nm-sidebar-toggle {
+    flex: 0 0 auto;
+  }
+
+  .nm-brand-lockup {
+    display: inline-flex;
+    min-width: 0;
+    height: 42px;
+    align-items: center;
     gap: 10px;
-    padding: 2px 4px;
+    border-radius: 12px;
+    background: #ececec;
+    color: #242424;
+    padding: 0 14px 0 11px;
+    box-shadow: 4px 4px 8px rgba(160, 160, 160, 0.6), -4px -4px 8px rgba(255, 255, 255, 1);
+  }
+
+  .nm-brand-hourglass {
+    display: grid;
+    width: 26px;
+    height: 26px;
+    place-items: center;
+    font-size: 20px;
+    line-height: 1;
+    filter: drop-shadow(0 2px 2px rgba(80, 80, 80, 0.18));
+  }
+
+  .nm-brand-name {
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "SF Pro Rounded", "Avenir Next", Inter, ui-sans-serif, system-ui, sans-serif;
+    font-weight: 800;
+    letter-spacing: 0;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .nm-brand-name.is-zh {
+    font-size: 17px;
+  }
+
+  .nm-brand-name.is-en {
+    font-family: "SF Pro Rounded", "Avenir Next", "Helvetica Neue", Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 14px;
   }
 
   .nm-logo {
@@ -188,6 +245,15 @@ textarea {
     padding: 10px;
     font-size: 12.5px;
     font-weight: 700;
+  }
+
+  .nm-action-label,
+  .nm-account-label,
+  .nm-account-menu-icon,
+  .nm-sidebar-brand,
+  .nm-section-label,
+  .nm-history {
+    transition: opacity 0.16s ease, max-width 0.2s ease, transform 0.2s ease;
   }
 
   .nm-action:active,
@@ -286,6 +352,8 @@ textarea {
     background: #ececec;
     padding: 8px;
     box-shadow: 8px 12px 24px rgba(0, 0, 0, 0.15), 8px 8px 20px rgba(160, 160, 160, 0.6), -6px -6px 16px rgba(255, 255, 255, 1);
+    transform-origin: bottom left;
+    animation: nm-account-menu-in 0.16s ease;
   }
 
   .nm-account-menu-item,
@@ -1053,6 +1121,17 @@ textarea {
     }
   }
 
+  @keyframes nm-account-menu-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
   @keyframes nm-spin {
     to {
       transform: rotate(360deg);
@@ -1069,6 +1148,78 @@ textarea {
     40% {
       opacity: 0.9;
       transform: translateY(-3px);
+    }
+  }
+
+  @media (min-width: 768px) {
+    .nm-layout.is-sidebar-collapsed {
+      grid-template-columns: 64px minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .nm-layout.is-sidebar-collapsed .nm-sidebar {
+      align-items: center;
+      overflow: visible;
+      padding: 12px;
+    }
+
+    .nm-layout.is-sidebar-collapsed .nm-sidebar-top {
+      width: 40px;
+      justify-content: center;
+    }
+
+    .nm-layout.is-sidebar-collapsed .nm-sidebar-brand,
+    .nm-layout.is-sidebar-collapsed .nm-section-label,
+    .nm-layout.is-sidebar-collapsed .nm-history {
+      pointer-events: none;
+      max-width: 0;
+      opacity: 0;
+      transform: translateX(-8px);
+    }
+
+    .nm-layout.is-sidebar-collapsed .nm-sidebar-brand,
+    .nm-layout.is-sidebar-collapsed .nm-section-label {
+      overflow: hidden;
+    }
+
+    .nm-layout.is-sidebar-collapsed .nm-section-label {
+      height: 0;
+      padding: 0;
+    }
+
+    .nm-layout.is-sidebar-collapsed .nm-history {
+      display: none;
+    }
+
+    .nm-layout.is-sidebar-collapsed .nm-action,
+    .nm-layout.is-sidebar-collapsed .nm-account {
+      width: 40px;
+      height: 40px;
+      justify-content: center;
+      gap: 0;
+      padding: 0;
+      border-radius: 12px;
+    }
+
+    .nm-layout.is-sidebar-collapsed .nm-action-label,
+    .nm-layout.is-sidebar-collapsed .nm-account-label,
+    .nm-layout.is-sidebar-collapsed .nm-account-menu-icon {
+      max-width: 0;
+      overflow: hidden;
+      opacity: 0;
+      transform: translateX(-6px);
+    }
+
+    .nm-layout.is-sidebar-collapsed .nm-sidebar > .relative {
+      width: 40px;
+      margin-top: auto;
+    }
+
+    .nm-layout.is-sidebar-collapsed .nm-account-menu {
+      bottom: calc(100% + 8px);
+      left: 0;
+      width: min(250px, calc(100vw - 28px));
+      max-height: min(320px, calc(100dvh - 96px));
     }
   }
 

@@ -1,11 +1,13 @@
 import type { LlmModelDto, MessageDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronDown, Languages, LogOut, Menu, Plus, Send, Sparkles, Ticket, Trash2, Upload, UserRound } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Send, Sparkles, Ticket, Trash2, Upload, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { useNavigate } from "react-router-dom";
 import remarkGfm from "remark-gfm";
+import { BrandLockup } from "../components/BrandLockup";
 import { Button } from "../components/Button";
+import { LoginForm } from "../components/LoginForm";
+import { Modal } from "../components/Modal";
 import { api, endpoints } from "../lib/api";
 import { commonText, languageLabels, localizeErrorMessage, useLanguage, type Language } from "../lib/i18n";
 
@@ -15,8 +17,10 @@ const chatText = {
     closeConversations: "Close conversations",
     newChat: "New chat",
     history: "History",
+    collapseSidebar: "Collapse sidebar",
     openAccountMenu: "Open account menu",
     openConversations: "Open conversations",
+    reopenSidebar: "Open sidebar",
     selectModel: "Select model",
     modelsLoading: "Models loading",
     models: "Models",
@@ -32,15 +36,20 @@ const chatText = {
     shareConversation: "Share conversation",
     shareCopied: "Share link copied",
     shareFailed: "Could not create share link",
-    modelLocked: "Model is locked for this conversation"
+    modelLocked: "Model is locked for this conversation",
+    signInRequired: "Sign in to continue",
+    guestAccount: "Sign in",
+    signInDialogBody: "Sign in to send messages, save history, and manage your account."
   },
   zh: {
     loading: "加载中",
     closeConversations: "关闭会话列表",
     newChat: "新建对话",
     history: "历史记录",
+    collapseSidebar: "收起侧边栏",
     openAccountMenu: "打开账户菜单",
     openConversations: "打开会话列表",
+    reopenSidebar: "展开侧边栏",
     selectModel: "选择模型",
     modelsLoading: "模型加载中",
     models: "模型",
@@ -56,7 +65,10 @@ const chatText = {
     shareConversation: "分享对话",
     shareCopied: "分享链接已复制",
     shareFailed: "无法创建分享链接",
-    modelLocked: "此对话已锁定模型"
+    modelLocked: "此对话已锁定模型",
+    signInRequired: "请先登录",
+    guestAccount: "登录",
+    signInDialogBody: "登录后即可发送消息、保存历史记录并管理账户。"
   }
 } as const;
 
@@ -126,7 +138,6 @@ function ModelLogo({ model, size = "md" }: { model?: ModelLogoData; size?: "sm" 
 }
 
 export function ChatPage() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { language, setLanguage } = useLanguage();
   const t = chatText[language];
@@ -149,22 +160,20 @@ export function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const [accountMenuView, setAccountMenuView] = useState<"main" | "redeem">("main");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [scrollingAreas, setScrollingAreas] = useState<Record<string, boolean>>({});
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
 
   const me = useQuery({ queryKey: ["me"], queryFn: endpoints.me, retry: false });
-  const models = useQuery({ queryKey: ["models"], queryFn: endpoints.models, enabled: me.isSuccess });
+  const models = useQuery({ queryKey: ["models"], queryFn: endpoints.models });
   const conversations = useQuery({ queryKey: ["conversations"], queryFn: endpoints.conversations, enabled: me.isSuccess });
   const messages = useQuery({
     queryKey: ["messages", activeConversationId],
     queryFn: () => endpoints.messages(activeConversationId),
-    enabled: Boolean(activeConversationId)
+    enabled: Boolean(activeConversationId && me.isSuccess)
   });
-
-  useEffect(() => {
-    if (me.isError) navigate("/login");
-  }, [me.isError, navigate]);
 
   useEffect(() => {
     if (!modelId && models.data?.models[0]) setModelId(models.data.models[0].id);
@@ -239,9 +248,11 @@ export function ChatPage() {
   const selectedModel = models.data?.models.find((model) => model.id === modelId) ?? models.data?.models[0];
   const balance = me.data?.user.appTokenBalance ?? 0;
   const phoneNumber = me.data?.user.phoneNumber ?? "";
-  const activeConversation = conversations.data?.conversations.find((conversation) => conversation.id === activeConversationId);
+  const isAuthenticated = me.isSuccess;
+  const visibleConversations = isAuthenticated ? conversations.data?.conversations ?? [] : [];
+  const activeConversation = visibleConversations.find((conversation) => conversation.id === activeConversationId);
   const activeConversationTitle = activeConversation ? conversationTitleForLanguage(activeConversation.title, language) : t.startConversation;
-  const draftConversation = conversations.data?.conversations.find((conversation) => conversation.isDraft);
+  const draftConversation = visibleConversations.find((conversation) => conversation.isDraft);
 
   useEffect(() => {
     if (conversationModelId && modelId !== conversationModelId) setModelId(conversationModelId);
@@ -275,8 +286,17 @@ export function ChatPage() {
     return () => window.cancelAnimationFrame(frameId);
   }, [activeConversationId, allMessages.length, streamingText]);
 
+  function requireAuth() {
+    if (isAuthenticated) return true;
+    setAccountMenuOpen(false);
+    setAccountMenuView("main");
+    setLoginDialogOpen(true);
+    return false;
+  }
+
   async function sendMessage() {
     if (!draft.trim() || !modelId || isSending || conversationIsLoading) return;
+    if (!requireAuth()) return;
     const message = draft;
     const optimisticMessage: MessageDto = {
       id: `pending-${Date.now()}`,
@@ -356,6 +376,7 @@ export function ChatPage() {
   }
 
   function startNewChat() {
+    if (!requireAuth()) return;
     if (draftConversation) {
       setActiveConversationId(draftConversation.id);
       setSidebarOpen(false);
@@ -395,31 +416,38 @@ export function ChatPage() {
   });
   const shareDisabled = !activeConversationId || persistedMessages.length === 0 || shareConversation.isPending;
 
-  if (me.isLoading) return <main className="grid min-h-screen place-items-center bg-[#dcdde3] text-ink">{t.loading}</main>;
-
   return (
     <main className="nm-page">
       <div className="nm-shell">
-        <div className="nm-layout">
+        <div className={`nm-layout ${sidebarCollapsed ? "is-sidebar-collapsed" : ""}`}>
           {sidebarOpen && <button className="nm-drawer-scrim md:hidden" aria-label={t.closeConversations} onClick={() => setSidebarOpen(false)} />}
           <aside className={`nm-sidebar ${sidebarOpen ? "is-open" : ""}`}>
-            <div className="nm-brand">
-              <div className="nm-logo nm-logo-mark" aria-hidden="true">⏳</div>
-              <div className="nm-brand-wordmark">
-                <div className={`nm-brand-title ${language === "zh" ? "is-zh" : "is-en"}`}>
-                  {language === "zh" ? "工夫AI" : "GANGHU AI"}
-                </div>
+            <div className="nm-sidebar-top">
+              <div className="nm-brand nm-sidebar-brand">
+                <BrandLockup language={language} />
               </div>
+              <button
+                className="nm-icon-button nm-sidebar-toggle hidden md:grid"
+                onClick={() => {
+                  setSidebarCollapsed((collapsed) => !collapsed);
+                  setAccountMenuOpen(false);
+                  setAccountMenuView("main");
+                }}
+                aria-label={sidebarCollapsed ? t.reopenSidebar : t.collapseSidebar}
+                title={sidebarCollapsed ? t.reopenSidebar : t.collapseSidebar}
+              >
+                {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+              </button>
             </div>
 
-            <button className="nm-action" onClick={startNewChat} disabled={createConversation.isPending}>
+            <button className="nm-action" onClick={startNewChat} disabled={createConversation.isPending} title={t.newChat}>
               <Plus size={16} />
-              {t.newChat}
+              <span className="nm-action-label">{t.newChat}</span>
             </button>
 
             <div className="nm-section-label">{t.history}</div>
             <div className={`nm-history ${scrollingAreas.history ? "is-scrolling" : ""}`} onScroll={() => markScrolling("history")}>
-              {conversations.data?.conversations.map((conversation) => (
+              {visibleConversations.map((conversation) => (
                 <button
                   key={conversation.id}
                   className={`nm-history-item group ${activeConversationId === conversation.id ? "is-active" : ""}`}
@@ -446,6 +474,7 @@ export function ChatPage() {
                 className={`nm-account ${accountMenuOpen ? "is-open" : ""}`}
                 aria-label={t.openAccountMenu}
                 onClick={() => {
+                  if (!requireAuth()) return;
                   if (accountMenuOpen) setAccountMenuView("main");
                   setAccountMenuOpen((open) => !open);
                 }}
@@ -453,10 +482,10 @@ export function ChatPage() {
                 <div className="nm-avatar-sm" aria-hidden="true">
                   <UserRound size={18} />
                 </div>
-                <div className="min-w-0 flex-1 text-left">
-                  <div className="truncate text-sm font-bold">{balance.toLocaleString()} {common.tokens}</div>
+                <div className="nm-account-label min-w-0 flex-1 text-left">
+                  <div className="truncate text-sm font-bold">{isAuthenticated ? `${balance.toLocaleString()} ${common.tokens}` : t.guestAccount}</div>
                 </div>
-                <Menu size={15} className="shrink-0 opacity-50" />
+                <Menu size={15} className="nm-account-menu-icon shrink-0 opacity-50" />
               </button>
               {accountMenuOpen && (
                 <div className={`nm-account-menu ${scrollingAreas.accountMenu ? "is-scrolling" : ""}`} onScroll={() => markScrolling("accountMenu")}>
@@ -473,8 +502,16 @@ export function ChatPage() {
                         setAccountMenuView("main");
                       }}
                       onLogout={async () => {
-                        await api("/api/auth/logout", { method: "POST" });
-                        navigate("/login");
+                        await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+                        setActiveConversationId("");
+                        setPendingUserMessage(null);
+                        setCompletedAssistantMessage(null);
+                        setStreamingText("");
+                        setAccountMenuOpen(false);
+                        setAccountMenuView("main");
+                        queryClient.removeQueries({ queryKey: ["conversations"] });
+                        queryClient.removeQueries({ queryKey: ["messages"] });
+                        queryClient.resetQueries({ queryKey: ["me"] });
                       }}
                     />
                   )}
@@ -608,6 +645,24 @@ export function ChatPage() {
           {toastKind === "success" ? <Check size={16} /> : <AlertTriangle size={16} />}
           <span>{toastMessage}</span>
         </div>
+      )}
+      {loginDialogOpen && (
+        <Modal title={t.signInRequired} onClose={() => setLoginDialogOpen(false)} className="max-w-sm">
+          <div className="mb-4 flex items-start gap-3">
+            <p className="min-w-0 flex-1 text-sm font-semibold leading-6 text-[#666]">{t.signInDialogBody}</p>
+            <button className="nm-login-language shrink-0" onClick={() => setLanguage(language === "en" ? "zh" : "en")}>
+              {languageLabels[language === "en" ? "zh" : "en"]}
+            </button>
+          </div>
+          <LoginForm
+            language={language}
+            onSuccess={() => {
+              setLoginDialogOpen(false);
+              queryClient.invalidateQueries({ queryKey: ["me"] });
+              queryClient.invalidateQueries({ queryKey: ["conversations"] });
+            }}
+          />
+        </Modal>
       )}
     </main>
   );

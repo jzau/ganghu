@@ -4,7 +4,6 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AdminPage } from "./pages/AdminPage";
 import { ChatPage } from "./pages/ChatPage";
-import { LoginPage } from "./pages/LoginPage";
 import { SharedConversationPage } from "./pages/SharedConversationPage";
 import "./styles.css";
 
@@ -16,7 +15,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<ChatPage />} />
-          <Route path="/login" element={<LoginPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/share/:token" element={<SharedConversationPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
