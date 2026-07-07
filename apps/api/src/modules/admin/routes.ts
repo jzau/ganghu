@@ -5,6 +5,7 @@ import { createSecretToken, hashSecret, verifyPlainText } from "../../lib/crypto
 import { env } from "../../lib/env.js";
 import { toModelDto, toUserDto } from "../../lib/mapper.js";
 import { prisma } from "../../lib/prisma.js";
+import { getOpenRouterModelEndpointCount, OpenRouterError } from "../llm/openrouter.js";
 
 const logoUrlSchema = z.preprocess(
   (value) => {
@@ -21,10 +22,15 @@ const logoUrlSchema = z.preprocess(
     .default(null)
 );
 
-const modelSchema = z.object({
-  displayName: z.string().min(1),
-  provider: z.string().min(1).default("openrouter"),
-  providerModelId: z.string().min(1),
+const providerSchema = z.preprocess(
+  (value) => (typeof value === "string" ? value.trim().toLowerCase() : value),
+  z.literal("openrouter", { errorMap: () => ({ message: "Only openrouter models are supported" }) })
+);
+
+const modelBaseSchema = z.object({
+  displayName: z.string().trim().min(1),
+  provider: providerSchema.default("openrouter"),
+  providerModelId: z.string().trim().min(1),
   logoUrl: logoUrlSchema,
   enabled: z.boolean().default(true),
   inputAppTokensPer1k: z.number().int().min(0),
@@ -34,6 +40,15 @@ const modelSchema = z.object({
   contextWindowTokens: z.number().int().min(1000),
   sortOrder: z.number().int().default(0)
 });
+const tokenWindowRefinement = {
+  message: "Max output tokens must be lower than the context window",
+  path: ["maxOutputTokens"]
+};
+const modelSchema = modelBaseSchema.refine((model) => model.maxOutputTokens < model.contextWindowTokens, tokenWindowRefinement);
+const modelPatchSchema = modelBaseSchema.partial().refine((model) => {
+  if (model.maxOutputTokens === undefined || model.contextWindowTokens === undefined) return true;
+  return model.maxOutputTokens < model.contextWindowTokens;
+}, tokenWindowRefinement);
 const redeemCodeSchema = z.object({
   appTokenAmount: z.number().int().positive(),
   usageLimit: z.number().int().positive().nullable().optional().default(1),
@@ -70,15 +85,22 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/models", { preHandler: app.authenticateAdmin }, async (request) => {
-    const model = await prisma.llmModel.create({ data: modelSchema.parse(request.body) });
+    const input = modelSchema.parse(request.body);
+    await validateRunnableModel(input);
+    const model = await prisma.llmModel.create({ data: input });
     return { model: toModelDto(model) };
   });
 
-  app.patch("/models/:id", { preHandler: app.authenticateAdmin }, async (request) => {
+  app.patch("/models/:id", { preHandler: app.authenticateAdmin }, async (request, reply) => {
     const params = z.object({ id: z.string() }).parse(request.params);
+    const input = modelPatchSchema.parse(request.body);
+    const existingModel = await prisma.llmModel.findUnique({ where: { id: params.id } });
+    if (!existingModel) return reply.code(404).send({ message: "Model not found" });
+    await validateRunnableModel({ ...existingModel, ...input });
+
     const model = await prisma.llmModel.update({
       where: { id: params.id },
-      data: modelSchema.partial().parse(request.body)
+      data: input
     });
     return { model: toModelDto(model) };
   });
@@ -166,3 +188,25 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return { user: toUserDto(result) };
   });
 };
+
+async function validateRunnableModel(model: { enabled: boolean; provider: string; providerModelId: string }) {
+  if (!model.enabled) return;
+  if (model.provider !== "openrouter") throw createHttpError(400, "Only openrouter models are supported");
+
+  try {
+    const endpointCount = await getOpenRouterModelEndpointCount(model.providerModelId);
+    if (endpointCount === 0) {
+      throw createHttpError(400, `OpenRouter model has no available endpoints: ${model.providerModelId}`);
+    }
+  } catch (error) {
+    if (error instanceof OpenRouterError) {
+      const providerMessage = error.providerMessage ? `: ${error.providerMessage}` : "";
+      throw createHttpError(error.status === 404 ? 400 : 502, `OpenRouter model lookup failed${providerMessage}`);
+    }
+    throw error;
+  }
+}
+
+function createHttpError(statusCode: number, message: string) {
+  return Object.assign(new Error(message), { statusCode });
+}

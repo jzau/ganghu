@@ -85,5 +85,5 @@ const errorText: Record<string, Record<Language, string>> = {
 
 export function localizeErrorMessage(error: unknown, language: Language, fallback: string) {
   if (!(error instanceof Error)) return fallback;
-  return errorText[error.message]?.[language] ?? fallback;
+  return errorText[error.message]?.[language] ?? error.message ?? fallback;
 }

@@ -98,7 +98,7 @@ export function LoginForm({
   return (
     <>
       {header}
-      <label className="mb-2 block text-sm font-bold">{t.countryRegion}</label>
+      <label className="mb-2 block text-[12.5px] font-medium">{t.countryRegion}</label>
       <div className="nm-select-wrap mb-3">
         <select
           className="nm-field nm-select-field"
@@ -119,9 +119,9 @@ export function LoginForm({
         </select>
         <ChevronDown className="nm-select-chevron" size={18} aria-hidden="true" />
       </div>
-      <label className="mb-2 block text-sm font-bold">{t.phoneNumber}</label>
+      <label className="mb-2 block text-[12.5px] font-medium">{t.phoneNumber}</label>
       <div className="mb-3 flex gap-2">
-        <div className="nm-field flex w-20 shrink-0 items-center justify-center px-0 text-sm font-bold">{countryCode}</div>
+        <div className="nm-field flex w-20 shrink-0 items-center justify-center px-0 text-[12.5px] font-medium">{countryCode}</div>
         <input
           className="nm-field"
           inputMode="tel"
@@ -138,7 +138,7 @@ export function LoginForm({
       </div>
       {step === "otp" && (
         <>
-          <label className="mb-2 block text-sm font-bold">{t.otpSent} {fullPhoneNumber}</label>
+          <label className="mb-2 block text-[12.5px] font-medium">{t.otpSent} {fullPhoneNumber}</label>
           <input
             className="nm-field mb-3"
             inputMode="numeric"
@@ -150,7 +150,7 @@ export function LoginForm({
         </>
       )}
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-      <Button className="w-full" onClick={step === "phone" ? requestOtp : verifyOtp}>
+      <Button className="w-full !text-[12.5px] !font-medium" onClick={step === "phone" ? requestOtp : verifyOtp}>
         {step === "phone" ? t.sendOtp : t.signIn}
       </Button>
     </>

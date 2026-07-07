@@ -38,8 +38,7 @@ const chatText = {
     shareFailed: "Could not create share link",
     modelLocked: "Model is locked for this conversation",
     signInRequired: "Sign in to continue",
-    guestAccount: "Sign in",
-    signInDialogBody: "Sign in to send messages, save history, and manage your account."
+    guestAccount: "Sign in"
   },
   zh: {
     loading: "加载中",
@@ -67,8 +66,7 @@ const chatText = {
     shareFailed: "无法创建分享链接",
     modelLocked: "此对话已锁定模型",
     signInRequired: "请先登录",
-    guestAccount: "登录",
-    signInDialogBody: "登录后即可发送消息、保存历史记录并管理账户。"
+    guestAccount: "登录"
   }
 } as const;
 
@@ -647,9 +645,15 @@ export function ChatPage() {
         </div>
       )}
       {loginDialogOpen && (
-        <Modal title={t.signInRequired} onClose={() => setLoginDialogOpen(false)} className="max-w-sm">
-          <div className="mb-4 flex items-start gap-3">
-            <p className="min-w-0 flex-1 text-sm font-semibold leading-6 text-[#666]">{t.signInDialogBody}</p>
+        <Modal
+          title={t.signInRequired}
+          onClose={() => setLoginDialogOpen(false)}
+          className="nm-login-modal max-w-sm"
+          titleClassName="!text-sm !font-medium"
+          hideCloseButton
+          closeOnBackdrop
+        >
+          <div className="nm-login-language-wrap">
             <button className="nm-login-language shrink-0" onClick={() => setLanguage(language === "en" ? "zh" : "en")}>
               {languageLabels[language === "en" ? "zh" : "en"]}
             </button>

@@ -16,6 +16,40 @@ export interface StreamResult {
   cost?: string;
 }
 
+type OpenRouterUsage = {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  cost?: number | string;
+};
+
+const nonStreamingFirstModels = new Set(["tencent/hy3", "tencent/hy3:free"]);
+
+export class OpenRouterError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly providerMessage?: string
+  ) {
+    super(message);
+    this.name = "OpenRouterError";
+  }
+}
+
+export async function getOpenRouterModelEndpointCount(model: string) {
+  const headers: Record<string, string> = {};
+  if (env.OPENROUTER_API_KEY) headers.Authorization = `Bearer ${env.OPENROUTER_API_KEY}`;
+
+  const response = await fetch(`${env.OPENROUTER_BASE_URL}/models/${encodeModelPath(model)}/endpoints`, { headers });
+  if (!response.ok) {
+    const providerMessage = await readOpenRouterError(response);
+    throw new OpenRouterError(`OpenRouter model lookup failed with status ${response.status}`, response.status, providerMessage);
+  }
+
+  const payload = (await response.json()) as { data?: { endpoints?: unknown[] } };
+  return Array.isArray(payload.data?.endpoints) ? payload.data.endpoints.length : 0;
+}
+
 export async function* streamOpenRouterChat(input: {
   model: string;
   messages: LlmChatMessage[];
@@ -34,25 +68,17 @@ export async function* streamOpenRouterChat(input: {
     };
   }
 
-  const response = await fetch(`${env.OPENROUTER_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": env.OPENROUTER_SITE_URL,
-      "X-Title": env.OPENROUTER_APP_NAME
-    },
-    body: JSON.stringify({
-      model: input.model,
-      messages: input.messages,
-      max_tokens: input.maxTokens,
-      stream: true,
-      usage: { include: true }
-    })
-  });
+  if (shouldUseNonStreamingFirst(input.model)) {
+    const fallback = await completeOpenRouterChat(input);
+    yield { delta: fallback.content };
+    return fallback;
+  }
+
+  const response = await requestOpenRouterChat(input, true);
 
   if (!response.ok || !response.body) {
-    throw new Error(`OpenRouter request failed with status ${response.status}`);
+    const providerMessage = await readOpenRouterError(response);
+    throw new OpenRouterError(`OpenRouter request failed with status ${response.status}`, response.status, providerMessage);
   }
 
   const reader = response.body.getReader();
@@ -61,6 +87,7 @@ export async function* streamOpenRouterChat(input: {
   let content = "";
   let usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
   let generationId: string | undefined;
+  let cost: string | undefined;
 
   while (true) {
     const { value, done } = await reader.read();
@@ -82,13 +109,20 @@ export async function* streamOpenRouterChat(input: {
         yield { delta };
       }
       if (parsed.usage) {
-        usage = {
-          promptTokens: parsed.usage.prompt_tokens ?? usage.promptTokens,
-          completionTokens: parsed.usage.completion_tokens ?? usage.completionTokens,
-          totalTokens: parsed.usage.total_tokens ?? usage.totalTokens
-        };
+        usage = toUsage(parsed.usage, usage);
+        cost = parsed.usage.cost === undefined ? cost : String(parsed.usage.cost);
       }
     }
+  }
+
+  if (!content.trim() && usage.totalTokens === 0) {
+    const fallback = await completeOpenRouterChat(input);
+    yield { delta: fallback.content };
+    return fallback;
+  }
+
+  if (!content.trim()) {
+    throw new OpenRouterError("OpenRouter provider returned an empty response", 502);
   }
 
   if (usage.totalTokens === 0) {
@@ -99,9 +133,82 @@ export async function* streamOpenRouterChat(input: {
     };
   }
 
-  return { content, usage, generationId };
+  return { content, usage, generationId, cost };
 }
 
 export function estimateTokens(text: string) {
   return Math.max(1, Math.ceil(text.length / 4));
+}
+
+function encodeModelPath(model: string) {
+  return model.split("/").map((part) => encodeURIComponent(part)).join("/");
+}
+
+function shouldUseNonStreamingFirst(model: string) {
+  return nonStreamingFirstModels.has(model);
+}
+
+async function completeOpenRouterChat(input: { model: string; messages: LlmChatMessage[]; maxTokens: number }): Promise<StreamResult> {
+  const response = await requestOpenRouterChat(input, false);
+  if (!response.ok) {
+    const providerMessage = await readOpenRouterError(response);
+    throw new OpenRouterError(`OpenRouter request failed with status ${response.status}`, response.status, providerMessage);
+  }
+
+  const parsed = await response.json() as {
+    id?: string;
+    choices?: Array<{ message?: { content?: unknown } }>;
+    usage?: OpenRouterUsage;
+  };
+  const content = typeof parsed.choices?.[0]?.message?.content === "string" ? parsed.choices[0].message.content : "";
+  if (!content.trim()) {
+    throw new OpenRouterError("OpenRouter provider returned an empty response", 502);
+  }
+
+  return {
+    content,
+    usage: toUsage(parsed.usage),
+    generationId: parsed.id,
+    cost: parsed.usage?.cost === undefined ? undefined : String(parsed.usage.cost)
+  };
+}
+
+function requestOpenRouterChat(input: { model: string; messages: LlmChatMessage[]; maxTokens: number }, stream: boolean) {
+  return fetch(`${env.OPENROUTER_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": env.OPENROUTER_SITE_URL,
+      "X-Title": env.OPENROUTER_APP_NAME
+    },
+    body: JSON.stringify({
+      model: input.model,
+      messages: input.messages,
+      max_tokens: input.maxTokens,
+      stream,
+      usage: { include: true }
+    })
+  });
+}
+
+function toUsage(rawUsage?: OpenRouterUsage, fallback = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }) {
+  return {
+    promptTokens: rawUsage?.prompt_tokens ?? fallback.promptTokens,
+    completionTokens: rawUsage?.completion_tokens ?? fallback.completionTokens,
+    totalTokens: rawUsage?.total_tokens ?? fallback.totalTokens
+  };
+}
+
+async function readOpenRouterError(response: Response) {
+  const body = await response.text().catch(() => "");
+  if (!body) return undefined;
+
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: unknown }; message?: unknown };
+    const message = parsed.error?.message ?? parsed.message;
+    return typeof message === "string" && message.trim() ? message.trim() : body.slice(0, 500);
+  } catch {
+    return body.slice(0, 500);
+  }
 }

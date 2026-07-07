@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { toConversationDto, toMessageDto } from "../../lib/mapper.js";
 import { prisma } from "../../lib/prisma.js";
-import { estimateTokens, streamOpenRouterChat, type LlmChatMessage } from "../llm/openrouter.js";
+import { estimateTokens, OpenRouterError, streamOpenRouterChat, type LlmChatMessage } from "../llm/openrouter.js";
 
 const createConversationSchema = z.object({ title: z.string().min(1).max(120).optional() });
 const chatSchema = z.object({
@@ -100,6 +100,9 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     const model = await prisma.llmModel.findFirst({ where: { id: input.modelId, enabled: true } });
 
     if (!model) return reply.code(404).send({ message: "Model not found" });
+    if (model.provider !== "openrouter") {
+      return reply.code(400).send({ message: "Only OpenRouter models are supported" });
+    }
     if (user.appTokenBalance < model.minimumRequiredBalance) {
       return reply.code(402).send({ message: "Not enough app tokens" });
     }
@@ -222,8 +225,20 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       });
       reply.raw.end();
     } catch (error) {
-      request.log.error({ error }, "chat stream failed");
-      writeEvent(reply, "error", { code: "CHAT_STREAM_FAILED", message: "Chat failed" });
+      const chatError = toChatStreamError(error);
+      request.log.error(
+        {
+          error,
+          user_id: userId,
+          selected_model_id: model.id,
+          provider: model.provider,
+          provider_model_id: model.providerModelId,
+          upstream_status: error instanceof OpenRouterError ? error.status : undefined,
+          upstream_message: error instanceof OpenRouterError ? error.providerMessage : undefined
+        },
+        "chat stream failed"
+      );
+      writeEvent(reply, "error", chatError);
       reply.raw.end();
     }
   });
@@ -256,4 +271,27 @@ function trimMessages(messages: LlmChatMessage[], maxTokens: number) {
     total += tokens;
   }
   return kept;
+}
+
+function toChatStreamError(error: unknown) {
+  if (error instanceof OpenRouterError) {
+    return {
+      code: "OPENROUTER_REQUEST_FAILED",
+      message: friendlyOpenRouterMessage(error)
+    };
+  }
+
+  return { code: "CHAT_STREAM_FAILED", message: "Chat failed" };
+}
+
+function friendlyOpenRouterMessage(error: OpenRouterError) {
+  const providerMessage = error.providerMessage?.replace(/\s+/g, " ").trim();
+  if (error.status === 429) {
+    return providerMessage ? `OpenRouter provider is rate limited: ${providerMessage}` : "OpenRouter provider is rate limited. Please try again shortly.";
+  }
+  if (error.status >= 500) {
+    return providerMessage ? `OpenRouter provider is temporarily unavailable: ${providerMessage}` : `OpenRouter provider is temporarily unavailable (${error.status}).`;
+  }
+  if (providerMessage) return `OpenRouter error: ${providerMessage}`;
+  return `OpenRouter request failed with status ${error.status}`;
 }
