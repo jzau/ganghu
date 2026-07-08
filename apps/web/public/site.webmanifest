@@ -1,0 +1,19 @@
+{
+  "name": "GANGHU AI",
+  "short_name": "GANGHU AI",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "theme_color": "#ececec",
+  "background_color": "#ececec",
+  "display": "standalone"
+}
