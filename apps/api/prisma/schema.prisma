@@ -49,6 +49,7 @@ model AdminSession {
 model LlmModel {
   id                    String            @id @default(cuid())
   displayName           String            @map("display_name")
+  modelSeriesName       String?           @map("model_series_name")
   provider              String
   providerModelId       String            @map("provider_model_id")
   logoUrl               String?           @map("logo_url")

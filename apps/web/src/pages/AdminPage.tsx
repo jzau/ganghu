@@ -362,6 +362,7 @@ function ModelsTable({ models }: { models: LlmModelDto[] }) {
           <tr>
             <Th>ID</Th>
             <Th>Display Name</Th>
+            <Th>Series Name</Th>
             <Th>Provider</Th>
             <Th>Provider Model ID</Th>
             <Th>Logo</Th>
@@ -380,6 +381,7 @@ function ModelsTable({ models }: { models: LlmModelDto[] }) {
             <tr key={model.id}>
               <Td mono>{model.id}</Td>
               <Td>{model.displayName}</Td>
+              <Td>{model.modelSeriesName || <span className="text-xs font-semibold text-[#808080]">Provider ID</span>}</Td>
               <Td>{model.provider}</Td>
               <Td mono>{model.providerModelId}</Td>
               <Td>
@@ -413,6 +415,7 @@ function ModelModalForm({ model, onClose }: { model?: LlmModelDto; onClose: () =
   const queryClient = useQueryClient();
   const [form, setForm] = useState<ModelFormState>({
     displayName: model?.displayName ?? "",
+    modelSeriesName: model?.modelSeriesName ?? "",
     provider: model?.provider ?? "openrouter",
     providerModelId: model?.providerModelId ?? "",
     logoUrl: model?.logoUrl ?? "",
@@ -428,6 +431,7 @@ function ModelModalForm({ model, onClose }: { model?: LlmModelDto; onClose: () =
   async function save() {
     const input = {
       ...form,
+      modelSeriesName: form.modelSeriesName.trim() || null,
       logoUrl: form.logoUrl.trim() || null
     };
     await api(model ? `/api/admin/models/${model.id}` : "/api/admin/models", {
@@ -453,6 +457,9 @@ function ModelFields({ form, setForm }: { form: ModelFormState; setForm: (form: 
     <div className="space-y-3">
       <FormField help="Name shown to users in the model picker." label="Display name">
         <input className="nm-field" placeholder="DeepSeek Chat" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} />
+      </FormField>
+      <FormField help="Optional subtitle shown in the model picker. Falls back to provider model ID when blank." label="Series name">
+        <input className="nm-field" placeholder="DeepSeek V3" value={form.modelSeriesName} onChange={(event) => setForm({ ...form, modelSeriesName: event.target.value })} />
       </FormField>
       <FormField help="The backend provider. Keep openrouter unless another provider is implemented." label="Provider">
         <input className="nm-field" placeholder="openrouter" value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value })} />
@@ -506,6 +513,7 @@ function FormField({ children, help, label }: { children: React.ReactNode; help:
 
 type ModelFormState = {
   displayName: string;
+  modelSeriesName: string;
   provider: string;
   providerModelId: string;
   logoUrl: string;

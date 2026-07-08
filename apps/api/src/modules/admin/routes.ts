@@ -26,9 +26,14 @@ const providerSchema = z.preprocess(
   (value) => (typeof value === "string" ? value.trim().toLowerCase() : value),
   z.literal("openrouter", { errorMap: () => ({ message: "Only openrouter models are supported" }) })
 );
+const optionalTextSchema = z.preprocess(
+  (value) => (typeof value === "string" ? value.trim() || null : value),
+  z.string().max(120).nullable().optional()
+);
 
 const modelBaseSchema = z.object({
   displayName: z.string().trim().min(1),
+  modelSeriesName: optionalTextSchema,
   provider: providerSchema.default("openrouter"),
   providerModelId: z.string().trim().min(1),
   logoUrl: logoUrlSchema,

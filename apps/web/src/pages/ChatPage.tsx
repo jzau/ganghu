@@ -90,6 +90,10 @@ function getModelLogoVariant(model?: ModelLogoData) {
   return "default";
 }
 
+function getModelSubtitle(model?: LlmModelDto) {
+  return model?.modelSeriesName?.trim() || model?.providerModelId;
+}
+
 function ModelLogo({ model, size = "md" }: { model?: ModelLogoData; size?: "sm" | "md" }) {
   const boxSize = modelLogoSize[size];
   const boxStyle = {
@@ -540,7 +544,7 @@ export function ChatPage() {
                   <span className="min-w-0 text-left">
                     <span className="block truncate text-sm font-bold">{selectedModel?.displayName ?? t.selectModel}</span>
                     <span className="block truncate text-[11px] text-[#808080]">
-                      {selectedModel?.providerModelId ?? t.modelsLoading}
+                      {getModelSubtitle(selectedModel) ?? t.modelsLoading}
                     </span>
                   </span>
                   {!modelSelectionLocked && <ChevronDown size={15} className="shrink-0 opacity-50" />}
@@ -560,7 +564,7 @@ export function ChatPage() {
                         <ModelLogo model={model} size="sm" />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-bold">{model.displayName}</span>
-                          <span className="block truncate text-[11px] text-[#808080]">{model.providerModelId}</span>
+                          <span className="block truncate text-[11px] text-[#808080]">{getModelSubtitle(model)}</span>
                         </span>
                         {model.id === modelId && <Check size={16} />}
                       </button>
