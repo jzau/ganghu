@@ -59,7 +59,7 @@ const chatText = {
     sendMessage: "发送消息",
     redeemCode: "兑换码",
     code: "兑换码",
-    addedTokens: (amount: number) => `已添加 ${amount} 个应用代币`,
+    addedTokens: (amount: number) => `已添加 ${amount} 个词元`,
     chatFailed: "聊天失败",
     shareConversation: "分享对话",
     shareCopied: "✅ 分享链接复制成功",
@@ -528,7 +528,7 @@ export function ChatPage() {
           <section className="nm-chat">
             <header className="nm-chat-header">
               <button className="nm-icon-button md:hidden" onClick={() => setSidebarOpen(true)} aria-label={t.openConversations}>
-                <Menu size={18} />
+                <span className="nm-mobile-menu-logo" aria-hidden="true">⏳</span>
               </button>
 
               <div className="relative min-w-0" ref={modelMenuRef}>

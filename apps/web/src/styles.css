@@ -167,6 +167,16 @@ textarea {
     filter: drop-shadow(0 2px 2px rgba(80, 80, 80, 0.18));
   }
 
+  .nm-mobile-menu-logo {
+    display: grid;
+    width: 22px;
+    height: 22px;
+    place-items: center;
+    font-size: 18px;
+    line-height: 1;
+    filter: drop-shadow(0 2px 2px rgba(80, 80, 80, 0.18));
+  }
+
   .nm-brand-name {
     font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
     font-weight: 800;
@@ -470,7 +480,6 @@ textarea {
     height: 38px;
     border-radius: 10px;
     padding: 0 11px;
-    font-size: 16px;
   }
 
   .nm-account-redeem-message {
@@ -1025,6 +1034,10 @@ textarea {
     height: 44px;
     border-radius: 14px;
     padding: 0 14px;
+    caret-color: #2a2a2a;
+    font-size: 16px;
+    font-weight: 400;
+    line-height: normal;
     box-shadow: inset 4px 4px 8px rgba(160, 160, 160, 0.6), inset -4px -4px 8px rgba(255, 255, 255, 1);
   }
 
