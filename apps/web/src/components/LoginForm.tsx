@@ -1,15 +1,16 @@
 import type { FormEvent, ReactNode } from "react";
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { localizeErrorMessage, type Language } from "../lib/i18n";
 import { Button } from "./Button";
 
 const supportedCountries = [
-  { label: { en: "China mainland", zh: "中国大陆" }, code: "+86", hint: "138 0013 8000", pattern: /^1\d{10}$/ },
-  { label: { en: "Hong Kong", zh: "中国香港" }, code: "+852", hint: "5123 4567", pattern: /^[23569]\d{7}$/ },
-  { label: { en: "Japan", zh: "日本" }, code: "+81", hint: "90 1234 5678", pattern: /^\d{9,10}$/ },
-  { label: { en: "Australia", zh: "澳大利亚" }, code: "+61", hint: "412 345 678", pattern: /^\d{9}$/ }
+  { label: { en: "China mainland", zh: "中国大陆" }, code: "+86", hint: "13800138000", pattern: /^1\d{10}$/ },
+  { label: { en: "Hong Kong", zh: "中国香港" }, code: "+852", hint: "51234567", pattern: /^[23569]\d{7}$/ },
+  { label: { en: "Japan", zh: "日本" }, code: "+81", hint: "9012345678", pattern: /^\d{9,10}$/ },
+  { label: { en: "Australia", zh: "澳大利亚" }, code: "+61", hint: "412345678", pattern: /^\d{9}$/ }
 ] as const;
 
 type CountryCode = (typeof supportedCountries)[number]["code"];
@@ -23,7 +24,12 @@ const loginText = {
     signIn: "Sign in",
     invalidPhone: (country: string) => `Enter a valid ${country} phone number.`,
     failedToSendOtp: "Failed to send OTP",
-    loginFailed: "Login failed"
+    loginFailed: "Login failed",
+    consentPrefix: "By signing up or logging in, you consent to GANGHU AI's",
+    termsOfUse: "Terms of Use",
+    privacyPolicy: "Privacy Policy",
+    consentJoiner: "and",
+    consentSuffix: "New phone numbers will be automatically registered."
   },
   zh: {
     countryRegion: "国家 / 地区",
@@ -33,7 +39,12 @@ const loginText = {
     signIn: "登录",
     invalidPhone: (country: string) => `请输入有效的${country}手机号。`,
     failedToSendOtp: "验证码发送失败",
-    loginFailed: "登录失败"
+    loginFailed: "登录失败",
+    consentPrefix: "注册或登录即表示您同意 GANGHU AI 的",
+    termsOfUse: "使用条款",
+    privacyPolicy: "隐私政策",
+    consentJoiner: "和",
+    consentSuffix: "新的手机号码将自动注册。"
   }
 } as const;
 
@@ -108,7 +119,7 @@ export function LoginForm({
     <form onSubmit={submitLogin}>
       {header}
       <label className="mb-2 block text-[12.5px] font-medium">{t.countryRegion}</label>
-      <div className="nm-select-wrap mb-3">
+      <div className="nm-select-wrap mb-5">
         <select
           className="nm-field nm-select-field"
           value={countryCode}
@@ -129,7 +140,7 @@ export function LoginForm({
         <ChevronDown className="nm-select-chevron" size={18} aria-hidden="true" />
       </div>
       <label className="mb-2 block text-[12.5px] font-medium">{t.phoneNumber}</label>
-      <div className="mb-3 flex gap-2">
+      <div className="mb-5 flex gap-2">
         <div className="nm-field flex w-20 shrink-0 items-center justify-center px-0 text-[12.5px] font-medium">{countryCode}</div>
         <input
           className="nm-field"
@@ -149,7 +160,7 @@ export function LoginForm({
         <>
           <label className="mb-2 block text-[12.5px] font-medium">{t.otpSent} {fullPhoneNumber}</label>
           <input
-            className="nm-field mb-3"
+            className="nm-field mb-5"
             inputMode="numeric"
             autoComplete="one-time-code"
             value={otp}
@@ -159,6 +170,17 @@ export function LoginForm({
         </>
       )}
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      <p className="nm-login-consent">
+        {t.consentPrefix}{" "}
+        <Link to="/terms-of-use" target="_blank" rel="noreferrer">
+          {t.termsOfUse}
+        </Link>{" "}
+        {t.consentJoiner}{" "}
+        <Link to="/privacy-policy" target="_blank" rel="noreferrer">
+          {t.privacyPolicy}
+        </Link>
+        . {t.consentSuffix}
+      </p>
       <Button className="w-full !text-[12.5px] !font-medium" type="submit">
         {step === "phone" ? t.sendOtp : t.signIn}
       </Button>
