@@ -23,6 +23,7 @@ const loginText = {
     sendOtp: "Send OTP",
     signIn: "Sign in",
     invalidPhone: (country: string) => `Enter a valid ${country} phone number.`,
+    invalidOtp: "Enter the verification code.",
     failedToSendOtp: "Failed to send OTP",
     loginFailed: "Login failed",
     consentPrefix: "By signing up or logging in, you consent to GANGHU AI's",
@@ -38,6 +39,7 @@ const loginText = {
     sendOtp: "发送验证码",
     signIn: "登录",
     invalidPhone: (country: string) => `请输入有效的${country}手机号。`,
+    invalidOtp: "请输入验证码。",
     failedToSendOtp: "验证码发送失败",
     loginFailed: "登录失败",
     consentPrefix: "注册或登录即表示您同意 GANGHU AI 的",
@@ -103,11 +105,15 @@ export function LoginForm({
   async function verifyOtp() {
     setError("");
     if (!validatePhoneNumber()) return;
+    if (otp.trim().length < 4) {
+      setError(t.invalidOtp);
+      return;
+    }
 
     try {
       await api("/api/auth/otp/verify", {
         method: "POST",
-        body: JSON.stringify({ countryCode, phoneNumber: localPhoneNumber, otp })
+        body: JSON.stringify({ countryCode, phoneNumber: localPhoneNumber, otp: otp.trim() })
       });
       onSuccess();
     } catch (err) {

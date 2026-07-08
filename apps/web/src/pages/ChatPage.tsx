@@ -1,4 +1,4 @@
-import type { LlmModelDto, MessageDto } from "@ai-chat/shared";
+import type { ApiUser, LlmModelDto, MessageDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Check, ChevronDown, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Send, Sparkles, Ticket, Trash2, Upload, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -36,6 +36,7 @@ const chatText = {
     shareConversation: "Share conversation",
     shareCopied: "Share link copied successfully",
     shareFailed: "Could not create share link",
+    streamInterrupted: "Response was interrupted. Refreshing conversation.",
     modelLocked: "Model is locked for this conversation",
     signInRequired: "Sign in to continue",
     guestAccount: "Sign in"
@@ -64,6 +65,7 @@ const chatText = {
     shareConversation: "分享对话",
     shareCopied: "分享链接复制成功",
     shareFailed: "无法创建分享链接",
+    streamInterrupted: "回复已中断，正在刷新对话。",
     modelLocked: "此对话已锁定模型",
     signInRequired: "请先登录",
     guestAccount: "登录"
@@ -148,6 +150,7 @@ export function ChatPage() {
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const composingMessageRef = useRef(false);
+  const sendInFlightRef = useRef(false);
   const streamingAssistantKeyRef = useRef("");
   const assistantRenderKeysRef = useRef<Record<string, string>>({});
   const scrollHideTimeouts = useRef<Record<string, number>>({});
@@ -196,6 +199,15 @@ export function ChatPage() {
   useEffect(() => {
     return () => {
       Object.values(scrollHideTimeouts.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
+    };
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.add("nm-chat-document");
+    document.body.classList.add("nm-chat-body");
+    return () => {
+      document.documentElement.classList.remove("nm-chat-document");
+      document.body.classList.remove("nm-chat-body");
     };
   }, []);
 
@@ -297,7 +309,7 @@ export function ChatPage() {
   }
 
   async function sendMessage() {
-    if (!draft.trim() || !modelId || isSending || conversationIsLoading) return;
+    if (!draft.trim() || !modelId || isSending || sendInFlightRef.current || conversationIsLoading) return;
     if (!requireAuth()) return;
     const message = draft;
     const optimisticMessage: MessageDto = {
@@ -314,7 +326,11 @@ export function ChatPage() {
     setCompletedAssistantMessage(null);
     setStreamingText("");
     setToastMessage("");
+    sendInFlightRef.current = true;
     setIsSending(true);
+    let acceptedConversationId = activeConversationId;
+    let serverAcceptedMessage = false;
+    let serverSentErrorEvent = false;
     try {
       const response = await fetch("/api/chat/stream", {
         method: "POST",
@@ -342,8 +358,18 @@ export function ChatPage() {
           const dataLine = chunk.split("\n").find((line) => line.startsWith("data:"));
           if (!event || !dataLine) continue;
           const data = JSON.parse(dataLine.slice(5));
+          if (event === "accepted") {
+            serverAcceptedMessage = true;
+            acceptedConversationId = data.message.conversationId;
+            setPendingUserMessage({ ...data.message, renderKey: optimisticMessage.id });
+            if (!activeConversationId) setActiveConversationId(data.message.conversationId);
+            queryClient.invalidateQueries({ queryKey: ["conversations"] });
+          }
           if (event === "delta") setStreamingText((current) => current + data.content);
-          if (event === "error") throw new Error(data.message ?? t.chatFailed);
+          if (event === "error") {
+            serverSentErrorEvent = true;
+            throw new Error(data.message ?? t.chatFailed);
+          }
           if (event === "done") {
             const assistantRenderKey = streamingAssistantKeyRef.current || `assistant-${data.message.id}`;
             assistantRenderKeysRef.current[data.message.id] = assistantRenderKey;
@@ -361,10 +387,16 @@ export function ChatPage() {
     } catch (error) {
       setPendingUserMessage(null);
       setStreamingText("");
-      setDraft(message);
+      if (serverAcceptedMessage && !serverSentErrorEvent) {
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+        if (acceptedConversationId) queryClient.invalidateQueries({ queryKey: ["messages", acceptedConversationId] });
+      } else {
+        setDraft(message);
+      }
       setToastKind("error");
-      setToastMessage(localizeErrorMessage(error, language, t.chatFailed));
+      setToastMessage(serverAcceptedMessage && !serverSentErrorEvent ? t.streamInterrupted : localizeErrorMessage(error, language, t.chatFailed));
     } finally {
+      sendInFlightRef.current = false;
       setIsSending(false);
     }
   }
@@ -419,7 +451,7 @@ export function ChatPage() {
   const shareDisabled = !activeConversationId || persistedMessages.length === 0 || shareConversation.isPending;
 
   return (
-    <main className="nm-page">
+    <main className="nm-page nm-chat-page">
       <div className="nm-shell">
         <div className={`nm-layout ${sidebarCollapsed ? "is-sidebar-collapsed" : ""}`}>
           {sidebarOpen && <button className="nm-drawer-scrim md:hidden" aria-label={t.closeConversations} onClick={() => setSidebarOpen(false)} />}
@@ -740,11 +772,14 @@ function RedeemCodeMenu({ language }: { language: Language }) {
   const [message, setMessage] = useState("");
   const [messageKind, setMessageKind] = useState<"error" | "success">("success");
   const redeemMutation = useMutation({
-    mutationFn: (redeemCode: string) => api<{ appTokenAmount: number }>("/api/redeem", { method: "POST", body: JSON.stringify({ code: redeemCode }) }),
+    mutationFn: (redeemCode: string) => api<{ appTokenAmount: number; appTokenBalance: number }>("/api/redeem", { method: "POST", body: JSON.stringify({ code: redeemCode }) }),
     onSuccess: (result) => {
       setCode("");
       setMessageKind("success");
       setMessage(t.addedTokens(result.appTokenAmount));
+      queryClient.setQueryData<{ user: ApiUser }>(["me"], (current) =>
+        current ? { user: { ...current.user, appTokenBalance: result.appTokenBalance } } : current
+      );
       queryClient.invalidateQueries({ queryKey: ["me"] });
     },
     onError: (error) => {
@@ -781,7 +816,6 @@ function RedeemCodeMenu({ language }: { language: Language }) {
           redeem();
         }}
         placeholder={t.code}
-        autoFocus
       />
       {message && <p className={`nm-account-redeem-message ${messageKind === "success" ? "is-success" : "is-error"}`}>{message}</p>}
       <Button className="h-9 w-full rounded-[10px] text-xs" type="submit" disabled={!code.trim() || redeemMutation.isPending}>
