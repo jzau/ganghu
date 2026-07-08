@@ -1,9 +1,24 @@
 {
-  "name": "GANGHU AI",
-  "short_name": "GANGHU AI",
+  "name": "工夫AI",
+  "short_name": "工夫AI",
   "icons": [
     {
-      "src": "/apple-touch-icon.png",
+      "src": "/apple-touch-icon-120x120-v2.png",
+      "sizes": "120x120",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon-152x152-v2.png",
+      "sizes": "152x152",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon-167x167-v2.png",
+      "sizes": "167x167",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon-180x180-v2.png",
       "sizes": "180x180",
       "type": "image/png"
     },

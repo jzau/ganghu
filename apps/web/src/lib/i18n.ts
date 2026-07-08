@@ -3,10 +3,11 @@ import { useEffect, useState } from "react";
 export type Language = "en" | "zh";
 
 const languageKey = "ganghu-language";
+const metadataAppName = "工夫AI";
 
 export const appNames: Record<Language, string> = {
   en: "GANGHU AI",
-  zh: "工夫 AI"
+  zh: "工夫AI"
 };
 
 export const languageLabels: Record<Language, string> = {
@@ -29,7 +30,10 @@ export function useLanguage() {
 
   useEffect(() => {
     document.documentElement.lang = language === "zh" ? "zh-Hans" : "en";
-    document.title = appNames[language];
+    document.title = metadataAppName;
+    updateMetaContent("name", "apple-mobile-web-app-title", metadataAppName);
+    updateMetaContent("property", "og:title", metadataAppName);
+    updateMetaContent("property", "og:site_name", metadataAppName);
     window.localStorage.setItem(languageKey, language);
   }, [language]);
 
@@ -38,6 +42,10 @@ export function useLanguage() {
   }
 
   return { language, setLanguage };
+}
+
+function updateMetaContent(attribute: "name" | "property", value: string, content: string) {
+  document.querySelector<HTMLMetaElement>(`meta[${attribute}="${value}"]`)?.setAttribute("content", content);
 }
 
 export const commonText = {
