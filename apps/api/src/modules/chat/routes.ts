@@ -113,7 +113,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     if (!conversation) return reply.code(404).send({ message: "Conversation not found" });
 
     const conversationModel = await prisma.message.findFirst({
-      where: { conversationId: conversation.id, modelId: { not: null } },
+      where: { conversationId: conversation.id, role: "assistant", modelId: { not: null } },
       orderBy: { createdAt: "asc" },
       select: { modelId: true }
     });
@@ -226,6 +226,9 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       reply.raw.end();
     } catch (error) {
       const chatError = toChatStreamError(error);
+      await cleanupFailedUserMessage(conversation.id, userMessage.id).catch((cleanupError) => {
+        request.log.error({ error: cleanupError, conversation_id: conversation.id, message_id: userMessage.id }, "failed to clean up failed chat message");
+      });
       request.log.error(
         {
           error,
@@ -243,6 +246,19 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 };
+
+async function cleanupFailedUserMessage(conversationId: string, userMessageId: string) {
+  await prisma.$transaction(async (tx) => {
+    await tx.message.deleteMany({ where: { id: userMessageId } });
+    const remainingMessages = await tx.message.count({ where: { conversationId } });
+    if (remainingMessages === 0) {
+      await tx.conversation.update({
+        where: { id: conversationId },
+        data: { title: "New chat", updatedAt: new Date() }
+      });
+    }
+  });
+}
 
 async function findOrCreateDraftConversation(userId: string, message: string) {
   const draftConversation = await prisma.conversation.findFirst({

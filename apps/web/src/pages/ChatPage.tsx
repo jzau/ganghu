@@ -240,13 +240,13 @@ export function ChatPage() {
   }, [activeConversationId, completedAssistantMessage, messages.data, modelId, pendingUserMessage, streamingText]);
 
   const persistedMessages = messages.data?.messages ?? [];
-  const conversationModelId = persistedMessages.find((message) => message.modelId)?.modelId ?? null;
+  const conversationModelId = persistedMessages.find((message) => message.role === "assistant" && message.modelId)?.modelId ?? null;
   const hasPendingMessage =
     pendingUserMessage &&
     (!pendingUserMessage.conversationId || pendingUserMessage.conversationId === activeConversationId);
   const chatHasContent = persistedMessages.length > 0 || Boolean(hasPendingMessage) || Boolean(streamingText);
   const conversationIsLoading = Boolean(activeConversationId && messages.isLoading);
-  const modelSelectionLocked = conversationIsLoading || chatHasContent;
+  const modelSelectionLocked = conversationIsLoading || Boolean(hasPendingMessage) || Boolean(streamingText) || Boolean(conversationModelId);
   const selectedModel = models.data?.models.find((model) => model.id === modelId) ?? models.data?.models[0];
   const balance = me.data?.user.appTokenBalance ?? 0;
   const phoneNumber = me.data?.user.phoneNumber ?? "";
