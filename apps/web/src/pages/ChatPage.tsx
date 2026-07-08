@@ -34,7 +34,7 @@ const chatText = {
     addedTokens: (amount: number) => `Added ${amount} app tokens`,
     chatFailed: "Chat failed",
     shareConversation: "Share conversation",
-    shareCopied: "Share link copied",
+    shareCopied: "✅ Share link copied successfully",
     shareFailed: "Could not create share link",
     modelLocked: "Model is locked for this conversation",
     signInRequired: "Sign in to continue",
@@ -62,7 +62,7 @@ const chatText = {
     addedTokens: (amount: number) => `已添加 ${amount} 个应用代币`,
     chatFailed: "聊天失败",
     shareConversation: "分享对话",
-    shareCopied: "分享链接已复制",
+    shareCopied: "✅ 分享链接复制成功",
     shareFailed: "无法创建分享链接",
     modelLocked: "此对话已锁定模型",
     signInRequired: "请先登录",
@@ -405,7 +405,7 @@ export function ChatPage() {
       const url = `${window.location.origin}/share/${data.token}`;
       await window.navigator.clipboard?.writeText(url).catch(() => undefined);
       setToastKind("success");
-      setToastMessage(`${t.shareCopied}: ${url}`);
+      setToastMessage(t.shareCopied);
     },
     onError: (error) => {
       setToastKind("error");
@@ -656,11 +656,6 @@ export function ChatPage() {
           hideCloseButton
           closeOnBackdrop
         >
-          <div className="nm-login-language-wrap">
-            <button className="nm-login-language shrink-0" onClick={() => setLanguage(language === "en" ? "zh" : "en")}>
-              {languageLabels[language === "en" ? "zh" : "en"]}
-            </button>
-          </div>
           <LoginForm
             language={language}
             onSuccess={() => {
@@ -772,7 +767,18 @@ function RedeemCodeMenu({ language }: { language: Language }) {
         <Ticket size={16} />
         <span>{t.redeemCode}</span>
       </div>
-      <input className="nm-field" value={code} onChange={(event) => setCode(event.target.value)} placeholder={t.code} autoFocus />
+      <input
+        className="nm-field"
+        value={code}
+        onChange={(event) => setCode(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          redeem();
+        }}
+        placeholder={t.code}
+        autoFocus
+      />
       {message && <p className={`nm-account-redeem-message ${messageKind === "success" ? "is-success" : "is-error"}`}>{message}</p>}
       <Button className="h-9 w-full rounded-[10px] text-xs" type="submit" disabled={!code.trim() || redeemMutation.isPending}>
         {redeemMutation.isPending ? <span className="nm-button-spinner" aria-hidden="true" /> : common.redeem}

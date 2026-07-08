@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { api } from "../lib/api";
@@ -57,6 +57,15 @@ export function LoginForm({
   const localPhoneNumber = phoneNumber.replace(/\D/g, "");
   const fullPhoneNumber = `${countryCode}${localPhoneNumber}`;
 
+  function submitLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (step === "phone") {
+      void requestOtp();
+    } else {
+      void verifyOtp();
+    }
+  }
+
   function validatePhoneNumber() {
     if (!country.pattern.test(localPhoneNumber)) {
       setError(t.invalidPhone(country.label[language]));
@@ -96,7 +105,7 @@ export function LoginForm({
   }
 
   return (
-    <>
+    <form onSubmit={submitLogin}>
       {header}
       <label className="mb-2 block text-[12.5px] font-medium">{t.countryRegion}</label>
       <div className="nm-select-wrap mb-3">
@@ -150,9 +159,9 @@ export function LoginForm({
         </>
       )}
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-      <Button className="w-full !text-[12.5px] !font-medium" onClick={step === "phone" ? requestOtp : verifyOtp}>
+      <Button className="w-full !text-[12.5px] !font-medium" type="submit">
         {step === "phone" ? t.sendOtp : t.signIn}
       </Button>
-    </>
+    </form>
   );
 }

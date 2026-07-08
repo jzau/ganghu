@@ -16,7 +16,12 @@ export const languageLabels: Record<Language, string> = {
 
 export function getInitialLanguage(): Language {
   if (typeof window === "undefined") return "en";
-  return window.localStorage.getItem(languageKey) === "zh" ? "zh" : "en";
+
+  const savedLanguage = window.localStorage.getItem(languageKey);
+  if (savedLanguage === "en" || savedLanguage === "zh") return savedLanguage;
+
+  const systemLanguages = navigator.languages?.length ? navigator.languages : [navigator.language];
+  return systemLanguages.some((systemLanguage) => systemLanguage.toLowerCase().startsWith("zh")) ? "zh" : "en";
 }
 
 export function useLanguage() {
