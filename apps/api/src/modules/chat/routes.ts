@@ -125,6 +125,17 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       data: { conversationId: conversation.id, role: "user", content: input.message, modelId: model.id }
     });
 
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no"
+    });
+    writeEvent(reply, "accepted", {
+      conversation: toConversationDto(conversation),
+      message: toMessageDto(userMessage)
+    });
+
     const history = await prisma.message.findMany({
       where: { conversationId: conversation.id },
       orderBy: { createdAt: "desc" },
@@ -135,13 +146,6 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       history.map((message) => ({ role: message.role as LlmChatMessage["role"], content: message.content })),
       model.contextWindowTokens - model.maxOutputTokens
     );
-
-    reply.raw.writeHead(200, {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no"
-    });
 
     try {
       const stream = streamOpenRouterChat({

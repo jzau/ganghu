@@ -47,7 +47,12 @@ function validatePhone(countryCode: (typeof countryCodes)[number], localNumber: 
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
   app.post("/otp/request", async (request, reply) => {
-    const input = phoneSchema.parse(request.body);
+    const parsedInput = phoneSchema.safeParse(request.body);
+    if (!parsedInput.success) {
+      return reply.code(400).send({ message: "Invalid phone number" });
+    }
+
+    const input = parsedInput.data;
     let phoneNumber: string;
     try {
       phoneNumber = normalizePhone(input);
@@ -63,7 +68,13 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/otp/verify", async (request, reply) => {
-    const input = verifySchema.parse(request.body);
+    const parsedInput = verifySchema.safeParse(request.body);
+    if (!parsedInput.success) {
+      const hasOtpError = parsedInput.error.issues.some((issue) => issue.path[0] === "otp");
+      return reply.code(400).send({ message: hasOtpError ? "Invalid OTP" : "Invalid phone number" });
+    }
+
+    const input = parsedInput.data;
     let phoneNumber: string;
     try {
       phoneNumber = normalizePhone(input);
