@@ -401,6 +401,9 @@ textarea {
     transition: box-shadow 0.18s ease;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   .nm-history-delete {
@@ -1196,7 +1199,10 @@ textarea {
   }
 
   .nm-confirm-modal {
-    width: min(360px, 100%);
+    width: min(420px, 100%);
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   .nm-login-modal {

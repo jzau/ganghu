@@ -88,8 +88,12 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(400).send({ message: error instanceof Error ? error.message : "Invalid phone number" });
     }
 
-    let externalAuthUserId = `mock:${phoneNumber}`;
-    if (env.AUTH_SERVICE_ENABLED) {
+    const authTestOtp = env.AUTH_TEST_OTP.trim();
+    const isAuthTestOtp = authTestOtp.length > 0 && input.otp.trim() === authTestOtp;
+    let externalAuthUserId = isAuthTestOtp ? `test:${phoneNumber}` : `mock:${phoneNumber}`;
+    if (isAuthTestOtp) {
+      request.log.info("Accepted configured auth test OTP");
+    } else if (env.AUTH_SERVICE_ENABLED) {
       try {
         const result = await authServiceClient.verifyOtp(phoneNumber, input.otp);
         externalAuthUserId = result.user.id;

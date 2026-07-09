@@ -465,6 +465,7 @@ export function ChatPage() {
     longPressTimerRef.current = window.setTimeout(() => {
       longPressTimerRef.current = null;
       longPressedConversationIdRef.current = conversationId;
+      window.getSelection()?.removeAllRanges();
       setPendingDeleteConversationId(conversationId);
     }, 650);
   }
@@ -743,7 +744,7 @@ export function ChatPage() {
                 language
               )}
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3">
               <Button variant="secondary" onClick={() => setPendingDeleteConversationId(null)}>
                 {t.cancel}
               </Button>

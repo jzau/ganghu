@@ -19,6 +19,7 @@ const schema = z.object({
   AUTH_SERVICE_BASE_URL: z.string().url().default(process.env.AUTH_SERVICE_URL ?? "http://localhost:5000"),
   AUTH_SERVICE_APP_ID: z.string().optional().default(process.env.AUTH_APP_ID ?? ""),
   AUTH_SERVICE_API_KEY: z.string().optional().default(process.env.AUTH_API_KEY ?? ""),
+  AUTH_TEST_OTP: z.string().optional().default(process.env.AUTH_SERVICE_TEST_OTP ?? ""),
   OPENROUTER_API_KEY: z.string().optional().default(""),
   OPENROUTER_BASE_URL: z.string().url().default("https://openrouter.ai/api/v1"),
   OPENROUTER_SITE_URL: z.string().optional().default("http://localhost:5173"),
