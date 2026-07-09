@@ -33,6 +33,7 @@ const optionalTextSchema = z.preprocess(
 
 const modelBaseSchema = z.object({
   displayName: z.string().trim().min(1),
+  displayNameZh: optionalTextSchema,
   modelSeriesName: optionalTextSchema,
   provider: providerSchema.default("openrouter"),
   providerModelId: z.string().trim().min(1),
@@ -130,6 +131,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return {
       codes: codes.map((code) => ({
         id: code.id,
+        code: code.code,
         appTokenAmount: code.appTokenAmount,
         usageLimit: code.usageLimit,
         usedCount: code.usedCount,
@@ -151,6 +153,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const code = alphabet();
     const redeemCode = await prisma.redeemCode.create({
       data: {
+        code,
         codeHash: hashSecret(code),
         appTokenAmount: input.appTokenAmount,
         usageLimit: input.usageLimit,

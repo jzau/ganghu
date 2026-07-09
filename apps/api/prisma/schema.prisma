@@ -49,6 +49,7 @@ model AdminSession {
 model LlmModel {
   id                    String            @id @default(cuid())
   displayName           String            @map("display_name")
+  displayNameZh         String?           @map("display_name_zh")
   modelSeriesName       String?           @map("model_series_name")
   provider              String
   providerModelId       String            @map("provider_model_id")
@@ -70,6 +71,7 @@ model LlmModel {
 
 model RedeemCode {
   id             String                 @id @default(cuid())
+  code           String?                @map("code")
   codeHash       String                 @unique @map("code_hash")
   appTokenAmount Int                    @map("app_token_amount")
   usageLimit     Int?                   @map("usage_limit")

@@ -39,7 +39,11 @@ const chatText = {
     streamInterrupted: "Response was interrupted. Refreshing conversation.",
     modelLocked: "Model is locked for this conversation",
     signInRequired: "Sign in to continue",
-    guestAccount: "Sign in"
+    guestAccount: "Sign in",
+    deleteConversationTitle: "Delete conversation?",
+    deleteConversationBody: "This conversation will be permanently deleted.",
+    cancel: "Cancel",
+    delete: "Delete"
   },
   zh: {
     loading: "加载中",
@@ -68,7 +72,11 @@ const chatText = {
     streamInterrupted: "回复已中断，正在刷新对话。",
     modelLocked: "此对话已锁定模型",
     signInRequired: "请先登录",
-    guestAccount: "登录"
+    guestAccount: "登录",
+    deleteConversationTitle: "删除对话？",
+    deleteConversationBody: "此对话将被永久删除。",
+    cancel: "取消",
+    delete: "删除"
   }
 } as const;
 
@@ -94,6 +102,11 @@ function getModelLogoVariant(model?: ModelLogoData) {
 
 function getModelSubtitle(model?: LlmModelDto) {
   return model?.modelSeriesName?.trim() || model?.providerModelId;
+}
+
+function getModelDisplayName(model: LlmModelDto | undefined, language: Language) {
+  if (!model) return undefined;
+  return language === "zh" ? model.displayNameZh?.trim() || model.displayName : model.displayName;
 }
 
 function ModelLogo({ model, size = "md" }: { model?: ModelLogoData; size?: "sm" | "md" }) {
@@ -151,6 +164,8 @@ export function ChatPage() {
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const composingMessageRef = useRef(false);
   const sendInFlightRef = useRef(false);
+  const longPressTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const longPressedConversationIdRef = useRef<string | null>(null);
   const streamingAssistantKeyRef = useRef("");
   const assistantRenderKeysRef = useRef<Record<string, string>>({});
   const scrollHideTimeouts = useRef<Record<string, number>>({});
@@ -170,6 +185,7 @@ export function ChatPage() {
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [scrollingAreas, setScrollingAreas] = useState<Record<string, boolean>>({});
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [pendingDeleteConversationId, setPendingDeleteConversationId] = useState<string | null>(null);
 
   const me = useQuery({ queryKey: ["me"], queryFn: endpoints.me, retry: false });
   const models = useQuery({ queryKey: ["models"], queryFn: endpoints.models });
@@ -429,11 +445,29 @@ export function ChatPage() {
 
   const deleteConversation = useMutation({
     mutationFn: (id: string) => api(`/api/conversations/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      setActiveConversationId("");
+    onSuccess: (_, id) => {
+      setActiveConversationId((currentId) => currentId === id ? "" : currentId);
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
     }
   });
+
+  function clearConversationLongPress() {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }
+
+  function startConversationLongPress(conversationId: string, pointerType: string) {
+    if (pointerType === "mouse") return;
+    clearConversationLongPress();
+    longPressedConversationIdRef.current = null;
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTimerRef.current = null;
+      longPressedConversationIdRef.current = conversationId;
+      setPendingDeleteConversationId(conversationId);
+    }, 650);
+  }
 
   const shareConversation = useMutation({
     mutationFn: (id: string) => api<{ token: string }>(`/api/conversations/${id}/share`, { method: "POST" }),
@@ -489,9 +523,18 @@ export function ChatPage() {
                   key={conversation.id}
                   className={`nm-history-item ${activeConversationId === conversation.id ? "is-active" : ""}`}
                   onClick={() => {
+                    if (longPressedConversationIdRef.current === conversation.id) {
+                      longPressedConversationIdRef.current = null;
+                      return;
+                    }
                     setActiveConversationId(conversation.id);
                     setSidebarOpen(false);
                   }}
+                  onContextMenu={(event) => event.preventDefault()}
+                  onPointerCancel={clearConversationLongPress}
+                  onPointerDown={(event) => startConversationLongPress(conversation.id, event.pointerType)}
+                  onPointerLeave={clearConversationLongPress}
+                  onPointerUp={clearConversationLongPress}
                 >
                   <span className="truncate">{conversationTitleForLanguage(conversation.title, language)}</span>
                   <Trash2
@@ -499,7 +542,7 @@ export function ChatPage() {
                     className="nm-history-delete"
                     onClick={(event) => {
                       event.stopPropagation();
-                      deleteConversation.mutate(conversation.id);
+                      setPendingDeleteConversationId(conversation.id);
                     }}
                   />
                 </button>
@@ -574,7 +617,7 @@ export function ChatPage() {
                 >
                   <ModelLogo model={selectedModel} />
                   <span className="min-w-0 text-left">
-                    <span className="block truncate text-sm font-bold">{selectedModel?.displayName ?? t.selectModel}</span>
+                    <span className="block truncate text-sm font-bold">{getModelDisplayName(selectedModel, language) ?? t.selectModel}</span>
                     <span className="block truncate text-[11px] text-[#808080]">
                       {getModelSubtitle(selectedModel) ?? t.modelsLoading}
                     </span>
@@ -595,7 +638,7 @@ export function ChatPage() {
                       >
                         <ModelLogo model={model} size="sm" />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate font-bold">{model.displayName}</span>
+                          <span className="block truncate font-bold">{getModelDisplayName(model, language)}</span>
                           <span className="block truncate text-[11px] text-[#808080]">{getModelSubtitle(model)}</span>
                         </span>
                         {model.id === modelId && <Check size={16} />}
@@ -682,6 +725,41 @@ export function ChatPage() {
           {toastKind === "success" ? <Check size={16} /> : <AlertTriangle size={16} />}
           <span>{toastMessage}</span>
         </div>
+      )}
+      {pendingDeleteConversationId && (
+        <Modal
+          title={t.deleteConversationTitle}
+          onClose={() => setPendingDeleteConversationId(null)}
+          className="nm-confirm-modal"
+          closeOnBackdrop
+        >
+          <div className="space-y-4">
+            <p className="text-sm font-semibold leading-relaxed text-[#666]">
+              {t.deleteConversationBody}
+            </p>
+            <p className="truncate rounded-xl bg-[#e4e4e4] px-3 py-2 text-sm font-extrabold text-[#2a2a2a] shadow-nm-in">
+              {conversationTitleForLanguage(
+                visibleConversations.find((conversation) => conversation.id === pendingDeleteConversationId)?.title ?? t.startConversation,
+                language
+              )}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <Button variant="secondary" onClick={() => setPendingDeleteConversationId(null)}>
+                {t.cancel}
+              </Button>
+              <Button
+                onClick={() => {
+                  deleteConversation.mutate(pendingDeleteConversationId);
+                  setPendingDeleteConversationId(null);
+                }}
+                disabled={deleteConversation.isPending}
+              >
+                <Trash2 size={16} />
+                {t.delete}
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
       {loginDialogOpen && (
         <Modal

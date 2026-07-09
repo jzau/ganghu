@@ -25,6 +25,7 @@ export function toModelDto(model: LlmModel): LlmModelDto {
   return {
     id: model.id,
     displayName: model.displayName,
+    displayNameZh: model.displayNameZh,
     modelSeriesName: model.modelSeriesName,
     provider: model.provider,
     providerModelId: model.providerModelId,

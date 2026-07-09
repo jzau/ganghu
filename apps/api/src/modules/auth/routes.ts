@@ -4,7 +4,7 @@ import { createSecretToken, hashSecret } from "../../lib/crypto.js";
 import { env } from "../../lib/env.js";
 import { prisma } from "../../lib/prisma.js";
 import { toUserDto } from "../../lib/mapper.js";
-import { authServiceClient } from "./authServiceClient.js";
+import { AuthServiceError, authServiceClient } from "./authServiceClient.js";
 
 const countryCodes = ["+86", "+852", "+81", "+61"] as const;
 const initialAppTokenBalance = 10_00;
@@ -61,7 +61,13 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
 
     if (env.AUTH_SERVICE_ENABLED) {
-      await authServiceClient.requestOtp(phoneNumber);
+      try {
+        await authServiceClient.requestOtp(phoneNumber);
+      } catch (error) {
+        request.log.error({ err: error }, "Failed to request OTP from auth service");
+        return reply.code(503).send({ message: "Authentication service unavailable" });
+      }
+      return { ok: true, message: "OTP sent successfully" };
     }
 
     return { ok: true, message: "Mock OTP sent. Use 000000 in development." };
@@ -84,8 +90,16 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     let externalAuthUserId = `mock:${phoneNumber}`;
     if (env.AUTH_SERVICE_ENABLED) {
-      const result = await authServiceClient.verifyOtp(phoneNumber, input.otp);
-      externalAuthUserId = result.user.id;
+      try {
+        const result = await authServiceClient.verifyOtp(phoneNumber, input.otp);
+        externalAuthUserId = result.user.id;
+      } catch (error) {
+        if (error instanceof AuthServiceError && error.statusCode === 401) {
+          return reply.code(401).send({ message: "Invalid OTP" });
+        }
+        request.log.error({ err: error }, "Failed to verify OTP with auth service");
+        return reply.code(503).send({ message: "Authentication service unavailable" });
+      }
     } else if (input.otp !== "000000") {
       return reply.code(401).send({ message: "Invalid OTP" });
     }

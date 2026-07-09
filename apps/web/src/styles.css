@@ -407,6 +407,7 @@ textarea {
     margin-left: auto;
     flex: 0 0 auto;
     opacity: 0;
+    pointer-events: none;
     transition: opacity 0.15s ease;
   }
 
@@ -422,12 +423,13 @@ textarea {
 
     .nm-history-item:hover .nm-history-delete {
       opacity: 0.7;
+      pointer-events: auto;
     }
   }
 
   @media (hover: none), (pointer: coarse) {
     .nm-history-delete {
-      opacity: 0.5;
+      display: none;
     }
   }
 
@@ -1122,6 +1124,33 @@ textarea {
     box-shadow: inset 2px 2px 4px rgba(160, 160, 160, 0.45), inset -2px -2px 4px rgba(255, 255, 255, 1);
   }
 
+  .nm-admin-main {
+    gap: 0;
+    padding: 0;
+  }
+
+  .nm-admin-mobile-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 64px;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(42, 42, 42, 0.08);
+  }
+
+  .nm-admin-content {
+    min-height: 0;
+    overflow: auto;
+    padding: 14px;
+  }
+
+  @media (min-width: 768px) {
+    .nm-admin-content {
+      padding: 20px;
+    }
+  }
+
   .nm-select-wrap {
     position: relative;
   }
@@ -1164,6 +1193,10 @@ textarea {
 
   .nm-redeem-modal {
     width: min(420px, 100%);
+  }
+
+  .nm-confirm-modal {
+    width: min(360px, 100%);
   }
 
   .nm-login-modal {
@@ -1492,7 +1525,7 @@ textarea {
       position: fixed;
       inset: 12px auto 12px 12px;
       z-index: 40;
-      width: min(300px, calc(100vw - 24px));
+      width: min(280px, calc(100vw - 72px));
       transform: translateX(calc(-100% - 24px));
       transition: transform 0.2s ease;
     }

@@ -1,6 +1,6 @@
 import type { ApiUser, LlmModelDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, Database, LogOut, Pencil, Plus, Save, Ticket, Users } from "lucide-react";
+import { Bot, Check, ChevronDown, Copy, Database, LogOut, Menu, Pencil, Plus, Save, Ticket, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
@@ -10,6 +10,7 @@ type AdminSection = "users" | "redeem-codes" | "models";
 
 type AdminRedeemCode = {
   id: string;
+  code: string | null;
   appTokenAmount: number;
   usageLimit: number | null;
   usedCount: number;
@@ -40,6 +41,7 @@ export function AdminPage() {
   const [password, setPassword] = useState("");
   const [authState, setAuthState] = useState<"checking" | "authed" | "guest">("checking");
   const [section, setSection] = useState<AdminSection>("users");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const authed = authState === "authed";
 
   const models = useQuery({ queryKey: ["admin-models"], queryFn: () => api<{ models: LlmModelDto[] }>("/api/admin/models"), enabled: authed });
@@ -74,6 +76,13 @@ export function AdminPage() {
     setAuthState("guest");
   }
 
+  function selectSection(nextSection: AdminSection) {
+    setSection(nextSection);
+    setSidebarOpen(false);
+  }
+
+  const sectionTitle = section === "users" ? "Users" : section === "redeem-codes" ? "Redeem Codes" : "Models";
+
   if (authState === "checking") {
     return (
       <main className="grid min-h-screen place-items-center bg-[#dcdde3] p-4 text-[#2a2a2a]">
@@ -104,35 +113,49 @@ export function AdminPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#dcdde3] p-4 text-[#2a2a2a]">
-      <div className="grid min-h-[calc(100vh-2rem)] grid-cols-[260px_minmax(0,1fr)] gap-4">
-        <aside className="nm-card flex min-h-[calc(100vh-2rem)] flex-col p-4">
-          <div className="mb-5 flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#1a1a1a] text-[#ececec] shadow-nm-out">
-              <Database size={19} />
+    <main className="nm-page nm-chat-page">
+      <div className="nm-shell">
+        <div className="nm-layout">
+          {sidebarOpen && <button className="nm-drawer-scrim md:hidden" aria-label="Close admin navigation" onClick={() => setSidebarOpen(false)} />}
+          <aside className={`nm-sidebar ${sidebarOpen ? "is-open" : ""}`}>
+            <div className="mb-3 flex items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#1a1a1a] text-[#ececec] shadow-nm-out">
+                <Database size={19} />
+              </div>
+              <div>
+                <h1 className="text-base font-extrabold">Admin Dashboard</h1>
+                <p className="text-xs font-semibold text-[#808080]">Operations</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-base font-extrabold">Admin Dashboard</h1>
-              <p className="text-xs font-semibold text-[#808080]">Operations</p>
+
+            <nav className="space-y-2">
+              <SidebarButton active={section === "users"} count={users.data?.users.length ?? 0} icon={<Users size={17} />} label="Users" onClick={() => selectSection("users")} />
+              <SidebarButton active={section === "redeem-codes"} count={codes.data?.codes.length ?? 0} icon={<Ticket size={17} />} label="Redeem Codes" onClick={() => selectSection("redeem-codes")} />
+              <SidebarButton active={section === "models"} count={models.data?.models.length ?? 0} icon={<Bot size={17} />} label="Models" onClick={() => selectSection("models")} />
+            </nav>
+
+            <Button className="mt-auto w-full justify-start" variant="secondary" onClick={() => void logout()}>
+              <LogOut size={16} /> Logout
+            </Button>
+          </aside>
+
+          <section className="nm-chat nm-admin-main">
+            <header className="nm-admin-mobile-header md:hidden">
+              <button className="nm-icon-button" onClick={() => setSidebarOpen(true)} aria-label="Open admin navigation">
+                <Menu size={18} />
+              </button>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-extrabold">Admin Dashboard</div>
+                <div className="truncate text-xs font-semibold text-[#808080]">{sectionTitle}</div>
+              </div>
+            </header>
+            <div className="nm-admin-content">
+              {section === "users" && <UsersTable users={users.data?.users ?? []} />}
+              {section === "redeem-codes" && <RedeemCodesTable codes={codes.data?.codes ?? []} />}
+              {section === "models" && <ModelsTable models={models.data?.models ?? []} />}
             </div>
-          </div>
-
-          <nav className="space-y-2">
-            <SidebarButton active={section === "users"} count={users.data?.users.length ?? 0} icon={<Users size={17} />} label="Users" onClick={() => setSection("users")} />
-            <SidebarButton active={section === "redeem-codes"} count={codes.data?.codes.length ?? 0} icon={<Ticket size={17} />} label="Redeem Codes" onClick={() => setSection("redeem-codes")} />
-            <SidebarButton active={section === "models"} count={models.data?.models.length ?? 0} icon={<Bot size={17} />} label="Models" onClick={() => setSection("models")} />
-          </nav>
-
-          <Button className="mt-auto w-full justify-start" variant="secondary" onClick={() => void logout()}>
-            <LogOut size={16} /> Logout
-          </Button>
-        </aside>
-
-        <section className="nm-card min-w-0 p-5">
-          {section === "users" && <UsersTable users={users.data?.users ?? []} />}
-          {section === "redeem-codes" && <RedeemCodesTable codes={codes.data?.codes ?? []} />}
-          {section === "models" && <ModelsTable models={models.data?.models ?? []} />}
-        </section>
+          </section>
+        </div>
       </div>
     </main>
   );
@@ -155,7 +178,7 @@ function SidebarButton({ active, count, icon, label, onClick }: { active: boolea
 
 function PageHeader({ action, subtitle, title }: { action?: React.ReactNode; subtitle: string; title: string }) {
   return (
-    <div className="mb-5 flex items-start justify-between gap-4">
+    <div className="mb-5 flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-start">
       <div>
         <h2 className="text-xl font-extrabold">{title}</h2>
         <p className="text-sm font-semibold text-[#808080]">{subtitle}</p>
@@ -184,6 +207,7 @@ function Td({ children, mono = false }: { children: React.ReactNode; mono?: bool
 function UsersTable({ users }: { users: ApiUser[] }) {
   const queryClient = useQueryClient();
   const [adjustments, setAdjustments] = useState<Record<string, number>>({});
+  const [expandedUsers, setExpandedUsers] = useState<Record<string, boolean>>({});
 
   async function adjust(userId: string) {
     const amount = adjustments[userId] ?? 0;
@@ -197,53 +221,75 @@ function UsersTable({ users }: { users: ApiUser[] }) {
 
   return (
     <div>
-      <PageHeader subtitle="All scalar user properties from the user record are listed here." title="Users" />
-      <TableShell>
-        <thead>
-          <tr>
-            <Th>ID</Th>
-            <Th>Phone Number</Th>
-            <Th>External Auth User ID</Th>
-            <Th>App Token Balance</Th>
-            <Th>Status</Th>
-            <Th>Created At</Th>
-            <Th>Updated At</Th>
-            <Th>Last Login At</Th>
-            <Th>Balance Adjustment</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((user) => (
-            <tr key={user.id}>
-              <Td mono>{user.id}</Td>
-              <Td>{user.phoneNumber}</Td>
-              <Td mono>{user.externalAuthUserId ?? "-"}</Td>
-              <Td>{user.appTokenBalance.toLocaleString()}</Td>
-              <Td>{user.status}</Td>
-              <Td>{formatDate(user.createdAt)}</Td>
-              <Td>{formatDate(user.updatedAt)}</Td>
-              <Td>{formatDate(user.lastLoginAt)}</Td>
-              <Td>
-                <div className="flex min-w-52 gap-2">
+      <PageHeader subtitle="Phone, balance, and balance adjustments stay visible. Extra account fields are collapsed." title="Users" />
+      <div className="max-h-[calc(100vh-10rem)] space-y-3 overflow-auto pr-1">
+        {users.map((user) => {
+          const expanded = Boolean(expandedUsers[user.id]);
+          return (
+            <section key={user.id} className="rounded-xl bg-[#ececec] p-3 shadow-nm-in">
+              <div className="grid gap-3 lg:grid-cols-[minmax(180px,1.1fr)_minmax(120px,0.7fr)_minmax(260px,1fr)_auto] lg:items-center">
+                <div className="min-w-0">
+                  <div className="text-xs font-extrabold uppercase tracking-[0.08em] text-[#808080]">Phone number</div>
+                  <div className="truncate text-base font-extrabold">{user.phoneNumber}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-extrabold uppercase tracking-[0.08em] text-[#808080]">Balance</div>
+                  <div className="text-base font-extrabold">{user.appTokenBalance.toLocaleString()}</div>
+                </div>
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
                   <input
-                    className="nm-field h-10 w-28"
+                    className="nm-field h-10 sm:w-32"
                     type="number"
                     value={adjustments[user.id] ?? 0}
                     onChange={(event) => setAdjustments((current) => ({ ...current, [user.id]: Number(event.target.value) }))}
                   />
-                  <Button variant="secondary" onClick={() => void adjust(user.id)}>Apply</Button>
+                  <Button className="shrink-0" variant="secondary" onClick={() => void adjust(user.id)}>Adjust balance</Button>
                 </div>
-              </Td>
-            </tr>
-          ))}
-        </tbody>
-      </TableShell>
+                <Button
+                  className="shrink-0 justify-center"
+                  variant="ghost"
+                  onClick={() => setExpandedUsers((current) => ({ ...current, [user.id]: !expanded }))}
+                >
+                  <ChevronDown className={`transition ${expanded ? "rotate-180" : ""}`} size={16} />
+                  {expanded ? "Hide" : "Show more"}
+                </Button>
+              </div>
+              {expanded && (
+                <dl className="mt-4 grid gap-3 border-t border-[#d5d5d5] pt-4 text-sm sm:grid-cols-2 xl:grid-cols-3">
+                  <UserDetail label="ID" mono value={user.id} />
+                  <UserDetail label="External Auth User ID" mono value={user.externalAuthUserId ?? "-"} />
+                  <UserDetail label="Status" value={user.status} />
+                  <UserDetail label="Created At" value={formatDate(user.createdAt)} />
+                  <UserDetail label="Updated At" value={formatDate(user.updatedAt)} />
+                  <UserDetail label="Last Login At" value={formatDate(user.lastLoginAt)} />
+                </dl>
+              )}
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function UserDetail({ label, mono = false, value }: { label: string; mono?: boolean; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-extrabold uppercase tracking-[0.08em] text-[#808080]">{label}</dt>
+      <dd className={`mt-1 break-words ${mono ? "font-mono text-xs" : "font-semibold"}`}>{value}</dd>
     </div>
   );
 }
 
 function RedeemCodesTable({ codes }: { codes: AdminRedeemCode[] }) {
   const [creating, setCreating] = useState(false);
+  const [copiedCodeId, setCopiedCodeId] = useState("");
+
+  async function copyRedeemCode(codeId: string, code: string) {
+    await window.navigator.clipboard?.writeText(code).catch(() => undefined);
+    setCopiedCodeId(codeId);
+    window.setTimeout(() => setCopiedCodeId((current) => current === codeId ? "" : current), 1600);
+  }
 
   return (
     <div>
@@ -257,6 +303,7 @@ function RedeemCodesTable({ codes }: { codes: AdminRedeemCode[] }) {
         <thead>
           <tr>
             <Th>ID</Th>
+            <Th>Code</Th>
             <Th>Amount</Th>
             <Th>Used</Th>
             <Th>Enabled</Th>
@@ -269,6 +316,19 @@ function RedeemCodesTable({ codes }: { codes: AdminRedeemCode[] }) {
           {codes.map((code) => (
             <tr key={code.id}>
               <Td mono>{code.id}</Td>
+              <Td>
+                {code.code ? (
+                  <div className="flex min-w-52 items-center gap-2">
+                    <span className="truncate font-mono text-xs font-extrabold">{code.code}</span>
+                    <Button className="h-9 shrink-0 px-2" variant="secondary" onClick={() => void copyRedeemCode(code.id, code.code!)}>
+                      {copiedCodeId === code.id ? <Check size={15} /> : <Copy size={15} />}
+                      {copiedCodeId === code.id ? "Copied" : "Copy"}
+                    </Button>
+                  </div>
+                ) : (
+                  <span className="text-xs font-semibold text-[#808080]">Unavailable for old code</span>
+                )}
+              </Td>
               <Td>{code.appTokenAmount.toLocaleString()}</Td>
               <Td>{code.usedCount}/{code.usageLimit ?? "unlimited"}</Td>
               <Td>{code.enabled ? "Yes" : "No"}</Td>
@@ -302,6 +362,14 @@ function RedeemCodeModal({ onClose }: { onClose: () => void }) {
   const [usageLimit, setUsageLimit] = useState(1);
   const [unlimited, setUnlimited] = useState(false);
   const [generatedCode, setGeneratedCode] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  async function copyGeneratedCode() {
+    if (!generatedCode) return;
+    await window.navigator.clipboard?.writeText(generatedCode).catch(() => undefined);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  }
 
   const createCode = useMutation({
     mutationFn: () =>
@@ -336,7 +404,13 @@ function RedeemCodeModal({ onClose }: { onClose: () => void }) {
             <div className="mb-1 flex items-center gap-2 text-sm font-extrabold">
               <Check size={16} /> Generated code
             </div>
-            <div className="break-all font-mono text-lg font-extrabold">{generatedCode}</div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="min-w-0 flex-1 break-all font-mono text-lg font-extrabold">{generatedCode}</div>
+              <Button className="shrink-0" variant="secondary" onClick={() => void copyGeneratedCode()}>
+                {copied ? <Check size={16} /> : <Copy size={16} />}
+                {copied ? "Copied" : "Copy"}
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -362,6 +436,7 @@ function ModelsTable({ models }: { models: LlmModelDto[] }) {
           <tr>
             <Th>ID</Th>
             <Th>Display Name</Th>
+            <Th>Chinese Name</Th>
             <Th>Series Name</Th>
             <Th>Provider</Th>
             <Th>Provider Model ID</Th>
@@ -381,6 +456,7 @@ function ModelsTable({ models }: { models: LlmModelDto[] }) {
             <tr key={model.id}>
               <Td mono>{model.id}</Td>
               <Td>{model.displayName}</Td>
+              <Td>{model.displayNameZh || <span className="text-xs font-semibold text-[#808080]">Default</span>}</Td>
               <Td>{model.modelSeriesName || <span className="text-xs font-semibold text-[#808080]">Provider ID</span>}</Td>
               <Td>{model.provider}</Td>
               <Td mono>{model.providerModelId}</Td>
@@ -415,6 +491,7 @@ function ModelModalForm({ model, onClose }: { model?: LlmModelDto; onClose: () =
   const queryClient = useQueryClient();
   const [form, setForm] = useState<ModelFormState>({
     displayName: model?.displayName ?? "",
+    displayNameZh: model?.displayNameZh ?? "",
     modelSeriesName: model?.modelSeriesName ?? "",
     provider: model?.provider ?? "openrouter",
     providerModelId: model?.providerModelId ?? "",
@@ -431,6 +508,7 @@ function ModelModalForm({ model, onClose }: { model?: LlmModelDto; onClose: () =
   async function save() {
     const input = {
       ...form,
+      displayNameZh: form.displayNameZh.trim() || null,
       modelSeriesName: form.modelSeriesName.trim() || null,
       logoUrl: form.logoUrl.trim() || null
     };
@@ -458,6 +536,9 @@ function ModelFields({ form, setForm }: { form: ModelFormState; setForm: (form: 
       <FormField help="Name shown to users in the model picker." label="Display name">
         <input className="nm-field" placeholder="DeepSeek Chat" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} />
       </FormField>
+      <FormField help="Optional name shown when users select Simplified Chinese." label="Chinese display name">
+        <input className="nm-field" placeholder="深度求索聊天" value={form.displayNameZh} onChange={(event) => setForm({ ...form, displayNameZh: event.target.value })} />
+      </FormField>
       <FormField help="Optional subtitle shown in the model picker. Falls back to provider model ID when blank." label="Series name">
         <input className="nm-field" placeholder="DeepSeek V3" value={form.modelSeriesName} onChange={(event) => setForm({ ...form, modelSeriesName: event.target.value })} />
       </FormField>
@@ -473,7 +554,7 @@ function ModelFields({ form, setForm }: { form: ModelFormState; setForm: (form: 
           {form.logoUrl.trim() && <img className="nm-admin-model-logo" src={form.logoUrl.trim()} alt="" />}
         </div>
       </FormField>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <FormField help="App tokens charged for every 1,000 prompt/input tokens." label="Input app tokens per 1k">
           <input className="nm-field" min={0} type="number" value={form.inputAppTokensPer1k} onChange={(event) => setForm({ ...form, inputAppTokensPer1k: Number(event.target.value) })} />
         </FormField>
@@ -513,6 +594,7 @@ function FormField({ children, help, label }: { children: React.ReactNode; help:
 
 type ModelFormState = {
   displayName: string;
+  displayNameZh: string;
   modelSeriesName: string;
   provider: string;
   providerModelId: string;

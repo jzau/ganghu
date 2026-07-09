@@ -77,6 +77,7 @@ const errorText: Record<string, Record<Language, string>> = {
   "Invalid phone number for selected country": { en: "Invalid phone number for selected country", zh: "手机号不符合所选国家或地区格式" },
   "Invalid phone number": { en: "Invalid phone number", zh: "手机号无效" },
   "Invalid OTP": { en: "Invalid OTP", zh: "验证码无效" },
+  "Authentication service unavailable": { en: "Authentication service unavailable. Please try again later.", zh: "认证服务暂不可用，请稍后重试。" },
   "Authentication required": { en: "Authentication required", zh: "请先登录" },
   "Conversation not found": { en: "Conversation not found", zh: "未找到对话" },
   "Shared conversation not found": { en: "Shared conversation not found", zh: "未找到分享对话" },

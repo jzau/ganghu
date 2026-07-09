@@ -17,6 +17,7 @@ export interface ApiUser {
 export interface LlmModelDto {
   id: string;
   displayName: string;
+  displayNameZh: string | null;
   modelSeriesName: string | null;
   provider: string;
   providerModelId: string;
