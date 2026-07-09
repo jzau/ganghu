@@ -487,7 +487,7 @@ export function ChatPage() {
               {visibleConversations.map((conversation) => (
                 <button
                   key={conversation.id}
-                  className={`nm-history-item group ${activeConversationId === conversation.id ? "is-active" : ""}`}
+                  className={`nm-history-item ${activeConversationId === conversation.id ? "is-active" : ""}`}
                   onClick={() => {
                     setActiveConversationId(conversation.id);
                     setSidebarOpen(false);
@@ -496,7 +496,7 @@ export function ChatPage() {
                   <span className="truncate">{conversationTitleForLanguage(conversation.title, language)}</span>
                   <Trash2
                     size={15}
-                    className="ml-auto opacity-0 transition group-hover:opacity-70"
+                    className="nm-history-delete"
                     onClick={(event) => {
                       event.stopPropagation();
                       deleteConversation.mutate(conversation.id);
