@@ -420,8 +420,12 @@ textarea {
     box-shadow: inset 3px 3px 6px rgba(160, 160, 160, 0.6), inset -3px -3px 6px rgba(255, 255, 255, 1);
   }
 
+  .nm-history-item.is-delete-revealed:not(.is-active) {
+    box-shadow: 2px 2px 4px rgba(160, 160, 160, 0.6), -2px -2px 4px rgba(255, 255, 255, 1);
+  }
+
   @media (hover: hover) and (pointer: fine) {
-    .nm-history-item:hover {
+    .nm-history-item:not(.is-active):hover {
       box-shadow: 2px 2px 4px rgba(160, 160, 160, 0.6), -2px -2px 4px rgba(255, 255, 255, 1);
     }
 
