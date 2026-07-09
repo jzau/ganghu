@@ -409,6 +409,7 @@ textarea {
   .nm-history-delete {
     margin-left: auto;
     flex: 0 0 auto;
+    color: #d6423a;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.15s ease;
@@ -431,8 +432,9 @@ textarea {
   }
 
   @media (hover: none), (pointer: coarse) {
-    .nm-history-delete {
-      display: none;
+    .nm-history-item.is-delete-revealed .nm-history-delete {
+      opacity: 1;
+      pointer-events: auto;
     }
   }
 
@@ -1181,6 +1183,9 @@ textarea {
     justify-content: center;
     background: rgba(0, 0, 0, 0.35);
     padding: 16px;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   .nm-modal {
@@ -1192,17 +1197,11 @@ textarea {
     background: #ececec;
     padding: 20px;
     box-shadow: 12px 12px 32px rgba(0, 0, 0, 0.35), -6px -6px 20px rgba(255, 255, 255, 0.7);
+    -webkit-touch-callout: none;
   }
 
   .nm-redeem-modal {
     width: min(420px, 100%);
-  }
-
-  .nm-confirm-modal {
-    width: min(420px, 100%);
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
   }
 
   .nm-login-modal {

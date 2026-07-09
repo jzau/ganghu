@@ -86,6 +86,20 @@ function conversationTitleForLanguage(title: string, language: Language) {
   return defaultConversationTitles.has(title) ? chatText[language].newChat : title;
 }
 
+function clearTextSelection() {
+  window.getSelection()?.removeAllRanges();
+  if (document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur();
+  }
+}
+
+function clearTextSelectionAfterRender() {
+  clearTextSelection();
+  window.requestAnimationFrame(clearTextSelection);
+  window.setTimeout(clearTextSelection, 50);
+  window.setTimeout(clearTextSelection, 160);
+}
+
 type ModelLogoData = Pick<LlmModelDto, "displayName" | "provider" | "providerModelId" | "logoUrl">;
 type RenderMessage = MessageDto & { renderKey?: string };
 const modelLogoSize = {
@@ -185,7 +199,7 @@ export function ChatPage() {
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [scrollingAreas, setScrollingAreas] = useState<Record<string, boolean>>({});
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
-  const [pendingDeleteConversationId, setPendingDeleteConversationId] = useState<string | null>(null);
+  const [revealedDeleteConversationId, setRevealedDeleteConversationId] = useState<string | null>(null);
 
   const me = useQuery({ queryKey: ["me"], queryFn: endpoints.me, retry: false });
   const models = useQuery({ queryKey: ["models"], queryFn: endpoints.models });
@@ -217,6 +231,10 @@ export function ChatPage() {
       Object.values(scrollHideTimeouts.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
     };
   }, []);
+
+  useEffect(() => {
+    if (revealedDeleteConversationId) clearTextSelectionAfterRender();
+  }, [revealedDeleteConversationId]);
 
   useEffect(() => {
     document.documentElement.classList.add("nm-chat-document");
@@ -293,20 +311,22 @@ export function ChatPage() {
   }, [modelSelectionLocked]);
 
   useEffect(() => {
-    if (!accountMenuOpen && !modelMenuOpen) return;
+    if (!accountMenuOpen && !modelMenuOpen && !revealedDeleteConversationId) return;
 
     function closeMenusOnOutsidePointer(event: PointerEvent) {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (accountMenuRef.current?.contains(target) || modelMenuRef.current?.contains(target)) return;
+      if (target instanceof Element && target.closest(".nm-history-item")) return;
       setAccountMenuOpen(false);
       setAccountMenuView("main");
       setModelMenuOpen(false);
+      setRevealedDeleteConversationId(null);
     }
 
     document.addEventListener("pointerdown", closeMenusOnOutsidePointer);
     return () => document.removeEventListener("pointerdown", closeMenusOnOutsidePointer);
-  }, [accountMenuOpen, modelMenuOpen]);
+  }, [accountMenuOpen, modelMenuOpen, revealedDeleteConversationId]);
 
   useEffect(() => {
     if (!activeConversationId) return;
@@ -458,6 +478,11 @@ export function ChatPage() {
     }
   }
 
+  function revealConversationDelete(conversationId: string) {
+    clearTextSelectionAfterRender();
+    setRevealedDeleteConversationId(conversationId);
+  }
+
   function startConversationLongPress(conversationId: string, pointerType: string) {
     if (pointerType === "mouse") return;
     clearConversationLongPress();
@@ -465,8 +490,7 @@ export function ChatPage() {
     longPressTimerRef.current = window.setTimeout(() => {
       longPressTimerRef.current = null;
       longPressedConversationIdRef.current = conversationId;
-      window.getSelection()?.removeAllRanges();
-      setPendingDeleteConversationId(conversationId);
+      revealConversationDelete(conversationId);
     }, 650);
   }
 
@@ -522,12 +546,13 @@ export function ChatPage() {
               {visibleConversations.map((conversation) => (
                 <button
                   key={conversation.id}
-                  className={`nm-history-item ${activeConversationId === conversation.id ? "is-active" : ""}`}
+                  className={`nm-history-item ${activeConversationId === conversation.id ? "is-active" : ""} ${revealedDeleteConversationId === conversation.id ? "is-delete-revealed" : ""}`}
                   onClick={() => {
                     if (longPressedConversationIdRef.current === conversation.id) {
                       longPressedConversationIdRef.current = null;
                       return;
                     }
+                    setRevealedDeleteConversationId(null);
                     setActiveConversationId(conversation.id);
                     setSidebarOpen(false);
                   }}
@@ -543,7 +568,8 @@ export function ChatPage() {
                     className="nm-history-delete"
                     onClick={(event) => {
                       event.stopPropagation();
-                      setPendingDeleteConversationId(conversation.id);
+                      deleteConversation.mutate(conversation.id);
+                      setRevealedDeleteConversationId(null);
                     }}
                   />
                 </button>
@@ -726,41 +752,6 @@ export function ChatPage() {
           {toastKind === "success" ? <Check size={16} /> : <AlertTriangle size={16} />}
           <span>{toastMessage}</span>
         </div>
-      )}
-      {pendingDeleteConversationId && (
-        <Modal
-          title={t.deleteConversationTitle}
-          onClose={() => setPendingDeleteConversationId(null)}
-          className="nm-confirm-modal"
-          closeOnBackdrop
-        >
-          <div className="space-y-4">
-            <p className="text-sm font-semibold leading-relaxed text-[#666]">
-              {t.deleteConversationBody}
-            </p>
-            <p className="truncate rounded-xl bg-[#e4e4e4] px-3 py-2 text-sm font-extrabold text-[#2a2a2a] shadow-nm-in">
-              {conversationTitleForLanguage(
-                visibleConversations.find((conversation) => conversation.id === pendingDeleteConversationId)?.title ?? t.startConversation,
-                language
-              )}
-            </p>
-            <div className="grid gap-3">
-              <Button variant="secondary" onClick={() => setPendingDeleteConversationId(null)}>
-                {t.cancel}
-              </Button>
-              <Button
-                onClick={() => {
-                  deleteConversation.mutate(pendingDeleteConversationId);
-                  setPendingDeleteConversationId(null);
-                }}
-                disabled={deleteConversation.isPending}
-              >
-                <Trash2 size={16} />
-                {t.delete}
-              </Button>
-            </div>
-          </div>
-        </Modal>
       )}
       {loginDialogOpen && (
         <Modal
