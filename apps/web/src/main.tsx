@@ -16,6 +16,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<ChatPage />} />
+          <Route path="/c/:conversationId" element={<ChatPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/terms-of-use" element={<LegalPage kind="terms" />} />
           <Route path="/privacy-policy" element={<LegalPage kind="privacy" />} />

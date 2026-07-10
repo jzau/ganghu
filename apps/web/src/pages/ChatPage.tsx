@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Check, ChevronDown, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Send, Sparkles, Ticket, Trash2, Upload, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { useNavigate, useParams } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 import { BrandLockup } from "../components/BrandLockup";
 import { Button } from "../components/Button";
@@ -170,6 +171,8 @@ function ModelLogo({ model, size = "md" }: { model?: ModelLogoData; size?: "sm" 
 
 export function ChatPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { conversationId: routeConversationId = "" } = useParams();
   const { language, setLanguage } = useLanguage();
   const t = chatText[language];
   const common = commonText[language];
@@ -183,7 +186,7 @@ export function ChatPage() {
   const streamingAssistantKeyRef = useRef("");
   const assistantRenderKeysRef = useRef<Record<string, string>>({});
   const scrollHideTimeouts = useRef<Record<string, number>>({});
-  const [activeConversationId, setActiveConversationId] = useState<string>("");
+  const [activeConversationId, setActiveConversationId] = useState<string>(routeConversationId);
   const [draft, setDraft] = useState("");
   const [modelId, setModelId] = useState("");
   const [pendingUserMessage, setPendingUserMessage] = useState<MessageDto | null>(null);
@@ -213,6 +216,10 @@ export function ChatPage() {
   useEffect(() => {
     if (!modelId && models.data?.models[0]) setModelId(models.data.models[0].id);
   }, [modelId, models.data]);
+
+  useEffect(() => {
+    setActiveConversationId(routeConversationId);
+  }, [routeConversationId]);
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -392,7 +399,10 @@ export function ChatPage() {
             serverAcceptedMessage = true;
             acceptedConversationId = data.message.conversationId;
             setPendingUserMessage({ ...data.message, renderKey: optimisticMessage.id });
-            if (!activeConversationId) setActiveConversationId(data.message.conversationId);
+            if (!activeConversationId) {
+              setActiveConversationId(data.message.conversationId);
+              navigate(`/c/${data.message.conversationId}`);
+            }
             queryClient.invalidateQueries({ queryKey: ["conversations"] });
           }
           if (event === "delta") setStreamingText((current) => current + data.content);
@@ -448,12 +458,16 @@ export function ChatPage() {
     setStreamingText("");
     setRevealedDeleteConversationId(null);
     setSidebarOpen(false);
+    navigate("/");
   }
 
   const deleteConversation = useMutation({
     mutationFn: (id: string) => api(`/api/conversations/${id}`, { method: "DELETE" }),
     onSuccess: (_, id) => {
-      setActiveConversationId((currentId) => currentId === id ? "" : currentId);
+      if (activeConversationId === id) {
+        setActiveConversationId("");
+        navigate("/");
+      }
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
     }
   });
@@ -542,6 +556,7 @@ export function ChatPage() {
                     setRevealedDeleteConversationId(null);
                     setActiveConversationId(conversation.id);
                     setSidebarOpen(false);
+                    navigate(`/c/${conversation.id}`);
                   }}
                   onContextMenu={(event) => event.preventDefault()}
                   onPointerCancel={clearConversationLongPress}
@@ -601,6 +616,7 @@ export function ChatPage() {
                         setPendingUserMessage(null);
                         setCompletedAssistantMessage(null);
                         setStreamingText("");
+                        navigate("/");
                         setAccountMenuOpen(false);
                         setAccountMenuView("main");
                         queryClient.removeQueries({ queryKey: ["conversations"] });
