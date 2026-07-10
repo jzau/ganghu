@@ -394,7 +394,8 @@ textarea {
     flex: 1;
     flex-direction: column;
     gap: 6px;
-    padding: 2px;
+    margin-right: -10px;
+    padding: 2px 12px 2px 2px;
   }
 
   .nm-history-item {
