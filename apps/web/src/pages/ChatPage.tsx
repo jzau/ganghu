@@ -215,12 +215,6 @@ export function ChatPage() {
   }, [modelId, models.data]);
 
   useEffect(() => {
-    if (!activeConversationId && conversations.data?.conversations[0]) {
-      setActiveConversationId(conversations.data.conversations[0].id);
-    }
-  }, [activeConversationId, conversations.data]);
-
-  useEffect(() => {
     if (!toastMessage) return;
     const timeoutId = window.setTimeout(() => setToastMessage(""), 4200);
     return () => window.clearTimeout(timeoutId);
@@ -290,17 +284,17 @@ export function ChatPage() {
   const hasPendingMessage =
     pendingUserMessage &&
     (!pendingUserMessage.conversationId || pendingUserMessage.conversationId === activeConversationId);
-  const chatHasContent = persistedMessages.length > 0 || Boolean(hasPendingMessage) || Boolean(streamingText);
   const conversationIsLoading = Boolean(activeConversationId && messages.isLoading);
   const modelSelectionLocked = conversationIsLoading || Boolean(hasPendingMessage) || Boolean(streamingText) || Boolean(conversationModelId);
   const selectedModel = models.data?.models.find((model) => model.id === modelId) ?? models.data?.models[0];
   const balance = me.data?.user.appTokenBalance ?? 0;
   const phoneNumber = me.data?.user.phoneNumber ?? "";
   const isAuthenticated = me.isSuccess;
-  const visibleConversations = isAuthenticated ? conversations.data?.conversations ?? [] : [];
+  const visibleConversations = isAuthenticated
+    ? (conversations.data?.conversations ?? []).filter((conversation) => !conversation.isDraft)
+    : [];
   const activeConversation = visibleConversations.find((conversation) => conversation.id === activeConversationId);
   const activeConversationTitle = activeConversation ? conversationTitleForLanguage(activeConversation.title, language) : t.startConversation;
-  const draftConversation = visibleConversations.find((conversation) => conversation.isDraft);
 
   useEffect(() => {
     if (conversationModelId && modelId !== conversationModelId) setModelId(conversationModelId);
@@ -447,21 +441,14 @@ export function ChatPage() {
 
   function startNewChat() {
     if (!requireAuth()) return;
-    if (draftConversation) {
-      setActiveConversationId(draftConversation.id);
-      setSidebarOpen(false);
-      return;
-    }
-    createConversation.mutate();
+    setActiveConversationId("");
+    setDraft("");
+    setPendingUserMessage(null);
+    setCompletedAssistantMessage(null);
+    setStreamingText("");
+    setRevealedDeleteConversationId(null);
+    setSidebarOpen(false);
   }
-
-  const createConversation = useMutation({
-    mutationFn: () => api<{ conversation: { id: string } }>("/api/conversations", { method: "POST", body: JSON.stringify({ title: chatText.en.newChat }) }),
-    onSuccess: (data) => {
-      setActiveConversationId(data.conversation.id);
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-    }
-  });
 
   const deleteConversation = useMutation({
     mutationFn: (id: string) => api(`/api/conversations/${id}`, { method: "DELETE" }),
@@ -536,7 +523,7 @@ export function ChatPage() {
               </button>
             </div>
 
-            <button className="nm-action" onClick={startNewChat} disabled={createConversation.isPending} title={t.newChat}>
+            <button className="nm-action" onClick={startNewChat} disabled={isSending} title={t.newChat}>
               <Plus size={16} />
               <span className="nm-action-label">{t.newChat}</span>
             </button>
