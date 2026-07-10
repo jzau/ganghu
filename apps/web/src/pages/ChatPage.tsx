@@ -455,6 +455,7 @@ export function ChatPage() {
 
   function startNewChat() {
     if (!requireAuth()) return;
+    setSidebarOpen(false);
     if (!activeConversationId) return;
 
     setActiveConversationId("");
@@ -465,7 +466,6 @@ export function ChatPage() {
     setStreamingText("");
     setModelMenuOpen(false);
     setRevealedDeleteConversationId(null);
-    setSidebarOpen(false);
     navigate("/");
   }
 
