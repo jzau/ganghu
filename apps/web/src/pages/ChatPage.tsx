@@ -456,6 +456,7 @@ export function ChatPage() {
     if (!activeConversationId) return;
 
     setActiveConversationId("");
+    setDraft("");
     setModelId(models.data?.models[0]?.id ?? "");
     setPendingUserMessage(null);
     setCompletedAssistantMessage(null);
