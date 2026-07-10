@@ -51,6 +51,7 @@ model LlmModel {
   displayName           String            @map("display_name")
   displayNameZh         String?           @map("display_name_zh")
   modelSeriesName       String?           @map("model_series_name")
+  modelSeriesNameZh     String?           @map("model_series_name_zh")
   provider              String
   providerModelId       String            @map("provider_model_id")
   logoUrl               String?           @map("logo_url")

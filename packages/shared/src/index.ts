@@ -19,6 +19,7 @@ export interface LlmModelDto {
   displayName: string;
   displayNameZh: string | null;
   modelSeriesName: string | null;
+  modelSeriesNameZh: string | null;
   provider: string;
   providerModelId: string;
   logoUrl: string | null;

@@ -117,8 +117,10 @@ function getModelLogoVariant(model?: ModelLogoData) {
   return "default";
 }
 
-function getModelSubtitle(model?: LlmModelDto) {
-  return model?.modelSeriesName?.trim() || model?.providerModelId;
+function getModelSubtitle(model: LlmModelDto | undefined, language: Language) {
+  if (!model) return undefined;
+  if (language === "zh") return model.modelSeriesNameZh?.trim() || model.modelSeriesName?.trim() || model.providerModelId;
+  return model.modelSeriesName?.trim() || model.providerModelId;
 }
 
 function getModelDisplayName(model: LlmModelDto | undefined, language: Language) {
@@ -655,7 +657,7 @@ export function ChatPage() {
                   <span className="min-w-0 text-left">
                     <span className="block truncate text-sm font-bold">{getModelDisplayName(selectedModel, language) ?? t.selectModel}</span>
                     <span className="block truncate text-[11px] text-[#808080]">
-                      {getModelSubtitle(selectedModel) ?? t.modelsLoading}
+                      {getModelSubtitle(selectedModel, language) ?? t.modelsLoading}
                     </span>
                   </span>
                   {!modelSelectionLocked && <ChevronDown size={15} className="shrink-0 opacity-50" />}
@@ -675,7 +677,7 @@ export function ChatPage() {
                         <ModelLogo model={model} size="sm" />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-bold">{getModelDisplayName(model, language)}</span>
-                          <span className="block truncate text-[11px] text-[#808080]">{getModelSubtitle(model)}</span>
+                          <span className="block truncate text-[11px] text-[#808080]">{getModelSubtitle(model, language)}</span>
                         </span>
                         {model.id === modelId && <Check size={16} />}
                       </button>

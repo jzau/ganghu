@@ -35,6 +35,7 @@ const modelBaseSchema = z.object({
   displayName: z.string().trim().min(1),
   displayNameZh: optionalTextSchema,
   modelSeriesName: optionalTextSchema,
+  modelSeriesNameZh: optionalTextSchema,
   provider: providerSchema.default("openrouter"),
   providerModelId: z.string().trim().min(1),
   logoUrl: logoUrlSchema,

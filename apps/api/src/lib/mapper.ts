@@ -27,6 +27,7 @@ export function toModelDto(model: LlmModel): LlmModelDto {
     displayName: model.displayName,
     displayNameZh: model.displayNameZh,
     modelSeriesName: model.modelSeriesName,
+    modelSeriesNameZh: model.modelSeriesNameZh,
     provider: model.provider,
     providerModelId: model.providerModelId,
     logoUrl: model.logoUrl,

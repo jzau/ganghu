@@ -438,6 +438,7 @@ function ModelsTable({ models }: { models: LlmModelDto[] }) {
             <Th>Display Name</Th>
             <Th>Chinese Name</Th>
             <Th>Series Name</Th>
+            <Th>Chinese Series Name</Th>
             <Th>Provider</Th>
             <Th>Provider Model ID</Th>
             <Th>Logo</Th>
@@ -458,6 +459,7 @@ function ModelsTable({ models }: { models: LlmModelDto[] }) {
               <Td>{model.displayName}</Td>
               <Td>{model.displayNameZh || <span className="text-xs font-semibold text-[#808080]">Default</span>}</Td>
               <Td>{model.modelSeriesName || <span className="text-xs font-semibold text-[#808080]">Provider ID</span>}</Td>
+              <Td>{model.modelSeriesNameZh || <span className="text-xs font-semibold text-[#808080]">Default</span>}</Td>
               <Td>{model.provider}</Td>
               <Td mono>{model.providerModelId}</Td>
               <Td>
@@ -493,6 +495,7 @@ function ModelModalForm({ model, onClose }: { model?: LlmModelDto; onClose: () =
     displayName: model?.displayName ?? "",
     displayNameZh: model?.displayNameZh ?? "",
     modelSeriesName: model?.modelSeriesName ?? "",
+    modelSeriesNameZh: model?.modelSeriesNameZh ?? "",
     provider: model?.provider ?? "openrouter",
     providerModelId: model?.providerModelId ?? "",
     logoUrl: model?.logoUrl ?? "",
@@ -510,6 +513,7 @@ function ModelModalForm({ model, onClose }: { model?: LlmModelDto; onClose: () =
       ...form,
       displayNameZh: form.displayNameZh.trim() || null,
       modelSeriesName: form.modelSeriesName.trim() || null,
+      modelSeriesNameZh: form.modelSeriesNameZh.trim() || null,
       logoUrl: form.logoUrl.trim() || null
     };
     await api(model ? `/api/admin/models/${model.id}` : "/api/admin/models", {
@@ -541,6 +545,9 @@ function ModelFields({ form, setForm }: { form: ModelFormState; setForm: (form: 
       </FormField>
       <FormField help="Optional subtitle shown in the model picker. Falls back to provider model ID when blank." label="Series name">
         <input className="nm-field" placeholder="DeepSeek V3" value={form.modelSeriesName} onChange={(event) => setForm({ ...form, modelSeriesName: event.target.value })} />
+      </FormField>
+      <FormField help="Optional series name shown when users select Simplified Chinese. Falls back to the default series name when blank." label="Chinese series name">
+        <input className="nm-field" placeholder="深度求索 V3" value={form.modelSeriesNameZh} onChange={(event) => setForm({ ...form, modelSeriesNameZh: event.target.value })} />
       </FormField>
       <FormField help="The backend provider. Keep openrouter unless another provider is implemented." label="Provider">
         <input className="nm-field" placeholder="openrouter" value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value })} />
@@ -596,6 +603,7 @@ type ModelFormState = {
   displayName: string;
   displayNameZh: string;
   modelSeriesName: string;
+  modelSeriesNameZh: string;
   provider: string;
   providerModelId: string;
   logoUrl: string;
