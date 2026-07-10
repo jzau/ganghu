@@ -16,6 +16,7 @@ const chatText = {
   en: {
     loading: "Loading",
     closeConversations: "Close conversations",
+    home: "Go to homepage",
     newChat: "New chat",
     history: "History",
     collapseSidebar: "Collapse sidebar",
@@ -49,6 +50,7 @@ const chatText = {
   zh: {
     loading: "加载中",
     closeConversations: "关闭会话列表",
+    home: "返回首页",
     newChat: "新建对话",
     history: "历史记录",
     collapseSidebar: "收起侧边栏",
@@ -451,11 +453,14 @@ export function ChatPage() {
 
   function startNewChat() {
     if (!requireAuth()) return;
+    if (!activeConversationId) return;
+
     setActiveConversationId("");
-    setDraft("");
+    setModelId(models.data?.models[0]?.id ?? "");
     setPendingUserMessage(null);
     setCompletedAssistantMessage(null);
     setStreamingText("");
+    setModelMenuOpen(false);
     setRevealedDeleteConversationId(null);
     setSidebarOpen(false);
     navigate("/");
@@ -517,9 +522,9 @@ export function ChatPage() {
           {sidebarOpen && <button className="nm-drawer-scrim md:hidden" aria-label={t.closeConversations} onClick={() => setSidebarOpen(false)} />}
           <aside className={`nm-sidebar ${sidebarOpen ? "is-open" : ""}`}>
             <div className="nm-sidebar-top">
-              <div className="nm-brand nm-sidebar-brand">
+              <a className="nm-brand nm-sidebar-brand nm-brand-home" href="/" aria-label={t.home} title={t.home}>
                 <BrandLockup language={language} />
-              </div>
+              </a>
               <button
                 className="nm-icon-button nm-sidebar-toggle hidden md:grid"
                 onClick={() => {

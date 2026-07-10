@@ -153,6 +153,18 @@ textarea {
     flex: 1;
   }
 
+  .nm-brand-home {
+    border-radius: 14px;
+    color: inherit;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .nm-brand-home:focus-visible {
+    outline: 2px solid rgba(42, 42, 42, 0.35);
+    outline-offset: 2px;
+  }
+
   .nm-sidebar-toggle {
     position: relative;
     flex: 0 0 auto;
