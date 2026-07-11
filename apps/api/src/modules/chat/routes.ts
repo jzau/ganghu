@@ -150,6 +150,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       model.contextWindowTokens - model.maxOutputTokens
     );
 
+    let partialAssistantContent = "";
     try {
       const stream = streamOpenRouterChat({
         model: model.providerModelId,
@@ -160,6 +161,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
 
       let result = await stream.next();
       while (!result.done) {
+        partialAssistantContent += result.value.delta;
         writeEvent(reply, "delta", { content: result.value.delta });
         result = await stream.next();
       }
@@ -233,6 +235,25 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       });
       reply.raw.end();
     } catch (error) {
+      if (streamAbortController.signal.aborted) {
+        await persistStoppedResponse({
+          conversationId: conversation.id,
+          modelId: model.id,
+          userMessage: input.message,
+          partialAssistantContent
+        });
+        request.log.info(
+          {
+            user_id: userId,
+            selected_model_id: model.id,
+            conversation_id: conversation.id,
+            partial_response_length: partialAssistantContent.length,
+            response_time_ms: Date.now() - startedAt
+          },
+          "chat stream stopped by client"
+        );
+        return;
+      }
       const chatError = toChatStreamError(error);
       await cleanupFailedUserMessage(conversation.id, userMessage.id).catch((cleanupError) => {
         request.log.error({ error: cleanupError, conversation_id: conversation.id, message_id: userMessage.id }, "failed to clean up failed chat message");
@@ -254,6 +275,34 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 };
+
+async function persistStoppedResponse(input: {
+  conversationId: string;
+  modelId: string;
+  userMessage: string;
+  partialAssistantContent: string;
+}) {
+  await prisma.$transaction(async (tx) => {
+    if (input.partialAssistantContent.trim()) {
+      await tx.message.create({
+        data: {
+          conversationId: input.conversationId,
+          role: "assistant",
+          content: input.partialAssistantContent,
+          modelId: input.modelId
+        }
+      });
+    }
+    const conversation = await tx.conversation.findUniqueOrThrow({ where: { id: input.conversationId } });
+    await tx.conversation.update({
+      where: { id: input.conversationId },
+      data: {
+        updatedAt: new Date(),
+        title: defaultConversationTitles.has(conversation.title) ? input.userMessage.slice(0, 80) : conversation.title
+      }
+    });
+  });
+}
 
 async function cleanupFailedUserMessage(conversationId: string, userMessageId: string) {
   await prisma.$transaction(async (tx) => {
