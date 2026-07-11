@@ -1,6 +1,6 @@
 import type { ApiUser, LlmModelDto, MessageDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronDown, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Send, Sparkles, Ticket, Trash2, Upload, UserRound } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Send, Sparkles, Square, Ticket, Trash2, Upload, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useNavigate, useParams } from "react-router-dom";
@@ -31,6 +31,7 @@ const chatText = {
     thinking: "Assistant is thinking",
     messagePlaceholder: "Message",
     sendMessage: "Send message",
+    stopResponse: "Stop response",
     redeemCode: "Redeem code",
     code: "Code",
     addedTokens: (amount: number) => `Added ${amount} app tokens`,
@@ -65,6 +66,7 @@ const chatText = {
     thinking: "助手正在思考",
     messagePlaceholder: "输入消息",
     sendMessage: "发送消息",
+    stopResponse: "停止回复",
     redeemCode: "兑换码",
     code: "兑换码",
     addedTokens: (amount: number) => `已添加 ${amount} 个词元`,
@@ -185,6 +187,8 @@ export function ChatPage() {
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const composingMessageRef = useRef(false);
   const sendInFlightRef = useRef(false);
+  const streamAbortControllerRef = useRef<AbortController | null>(null);
+  const stopRequestedRef = useRef(false);
   const longPressTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const longPressedConversationIdRef = useRef<string | null>(null);
   const streamingAssistantKeyRef = useRef("");
@@ -233,6 +237,7 @@ export function ChatPage() {
 
   useEffect(() => {
     return () => {
+      streamAbortControllerRef.current?.abort();
       Object.values(scrollHideTimeouts.current).forEach((timeoutId) => window.clearTimeout(timeoutId));
     };
   }, []);
@@ -368,6 +373,9 @@ export function ChatPage() {
     setStreamingText("");
     setToastMessage("");
     sendInFlightRef.current = true;
+    stopRequestedRef.current = false;
+    const abortController = new AbortController();
+    streamAbortControllerRef.current = abortController;
     setIsSending(true);
     let acceptedConversationId = activeConversationId;
     let serverAcceptedMessage = false;
@@ -375,6 +383,7 @@ export function ChatPage() {
     try {
       const response = await fetch("/api/chat/stream", {
         method: "POST",
+        signal: abortController.signal,
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ conversationId: activeConversationId || undefined, modelId, message })
@@ -429,6 +438,7 @@ export function ChatPage() {
         }
       }
     } catch (error) {
+      if (stopRequestedRef.current && abortController.signal.aborted) return;
       setPendingUserMessage(null);
       setStreamingText("");
       if (serverAcceptedMessage && !serverSentErrorEvent) {
@@ -440,9 +450,16 @@ export function ChatPage() {
       setToastKind("error");
       setToastMessage(serverAcceptedMessage && !serverSentErrorEvent ? t.streamInterrupted : localizeErrorMessage(error, language, t.chatFailed));
     } finally {
+      if (streamAbortControllerRef.current === abortController) streamAbortControllerRef.current = null;
       sendInFlightRef.current = false;
       setIsSending(false);
     }
+  }
+
+  function stopResponse() {
+    if (!isSending) return;
+    stopRequestedRef.current = true;
+    streamAbortControllerRef.current?.abort();
   }
 
   function markScrolling(area: string) {
@@ -746,12 +763,18 @@ export function ChatPage() {
                     if (composingMessageRef.current || nativeEvent.isComposing || nativeEvent.keyCode === 229) return;
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
+                      event.currentTarget.blur();
                       sendMessage();
                     }
                   }}
                 />
-                <Button className="nm-send-button px-0 disabled:!cursor-default" onClick={sendMessage} aria-label={t.sendMessage} disabled={!draft.trim() || !modelId || isSending || conversationIsLoading}>
-                  <Send size={20} />
+                <Button
+                  className={`nm-send-button px-0 disabled:!cursor-default ${isSending ? "is-stop" : ""}`}
+                  onClick={isSending ? stopResponse : sendMessage}
+                  aria-label={isSending ? t.stopResponse : t.sendMessage}
+                  disabled={isSending ? false : !draft.trim() || !modelId || conversationIsLoading}
+                >
+                  {isSending ? <Square size={17} fill="currentColor" /> : <Send size={20} />}
                 </Button>
               </div>
             </footer>

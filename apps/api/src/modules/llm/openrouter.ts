@@ -54,6 +54,7 @@ export async function* streamOpenRouterChat(input: {
   model: string;
   messages: LlmChatMessage[];
   maxTokens: number;
+  signal?: AbortSignal;
 }): AsyncGenerator<{ delta: string }, StreamResult> {
   if (!env.OPENROUTER_API_KEY) {
     const fallback = "OpenRouter is not configured yet. Add OPENROUTER_API_KEY to enable live model responses.";
@@ -148,7 +149,7 @@ function shouldUseNonStreamingFirst(model: string) {
   return nonStreamingFirstModels.has(model);
 }
 
-async function completeOpenRouterChat(input: { model: string; messages: LlmChatMessage[]; maxTokens: number }): Promise<StreamResult> {
+async function completeOpenRouterChat(input: { model: string; messages: LlmChatMessage[]; maxTokens: number; signal?: AbortSignal }): Promise<StreamResult> {
   const response = await requestOpenRouterChat(input, false);
   if (!response.ok) {
     const providerMessage = await readOpenRouterError(response);
@@ -173,9 +174,10 @@ async function completeOpenRouterChat(input: { model: string; messages: LlmChatM
   };
 }
 
-function requestOpenRouterChat(input: { model: string; messages: LlmChatMessage[]; maxTokens: number }, stream: boolean) {
+function requestOpenRouterChat(input: { model: string; messages: LlmChatMessage[]; maxTokens: number; signal?: AbortSignal }, stream: boolean) {
   return fetch(`${env.OPENROUTER_BASE_URL}/chat/completions`, {
     method: "POST",
+    signal: input.signal,
     headers: {
       Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
       "Content-Type": "application/json",

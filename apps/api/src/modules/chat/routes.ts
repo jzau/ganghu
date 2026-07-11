@@ -136,6 +136,9 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       message: toMessageDto(userMessage)
     });
 
+    const streamAbortController = new AbortController();
+    reply.raw.once("close", () => streamAbortController.abort());
+
     const history = await prisma.message.findMany({
       where: { conversationId: conversation.id },
       orderBy: { createdAt: "desc" },
@@ -151,7 +154,8 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       const stream = streamOpenRouterChat({
         model: model.providerModelId,
         messages: llmMessages,
-        maxTokens: model.maxOutputTokens
+        maxTokens: model.maxOutputTokens,
+        signal: streamAbortController.signal
       });
 
       let result = await stream.next();
