@@ -873,9 +873,11 @@ textarea {
 
     .nm-model-submenu {
       top: calc(100% - 1px);
-      left: max(0px, calc(100vw - 244px));
-      min-width: min(220px, calc(100vw - 24px));
-      max-width: calc(100vw - 24px);
+      left: 28px;
+      box-sizing: border-box;
+      width: calc(100% - 28px);
+      min-width: 0;
+      max-width: calc(100% - 28px);
     }
   }
 
