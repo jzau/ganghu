@@ -1,6 +1,6 @@
 import type { ApiUser, LlmModelDto, MessageDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronDown, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Send, Sparkles, Square, Ticket, Trash2, Upload, UserRound } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Send, Sparkles, Square, Ticket, Trash2, Upload, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useNavigate, useParams } from "react-router-dom";
@@ -130,6 +130,10 @@ function getModelDisplayName(model: LlmModelDto | undefined, language: Language)
   return language === "zh" ? model.displayNameZh?.trim() || model.displayName : model.displayName;
 }
 
+function getModelGroupKey(model: LlmModelDto) {
+  return `${model.provider}:${model.displayName.trim().toLowerCase()}`;
+}
+
 function ModelLogo({ model, size = "md" }: { model?: ModelLogoData; size?: "sm" | "md" }) {
   const boxSize = modelLogoSize[size];
   const boxStyle = {
@@ -207,6 +211,7 @@ export function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [openModelGroupKey, setOpenModelGroupKey] = useState<string | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [scrollingAreas, setScrollingAreas] = useState<Record<string, boolean>>({});
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
@@ -222,7 +227,9 @@ export function ChatPage() {
   });
 
   useEffect(() => {
-    if (!modelId && models.data?.models[0]) setModelId(models.data.models[0].id);
+    const availableModels = models.data?.models;
+    if (!availableModels?.length) return;
+    if (!availableModels.some((model) => model.id === modelId)) setModelId(availableModels[0].id);
   }, [modelId, models.data]);
 
   useEffect(() => {
@@ -303,6 +310,14 @@ export function ChatPage() {
   const conversationIsLoading = Boolean(activeConversationId && messages.isLoading);
   const modelSelectionLocked = conversationIsLoading || Boolean(hasPendingMessage) || Boolean(streamingText) || Boolean(conversationModelId);
   const selectedModel = models.data?.models.find((model) => model.id === modelId) ?? models.data?.models[0];
+  const modelGroups = useMemo(() => {
+    const groups = new Map<string, LlmModelDto[]>();
+    for (const model of models.data?.models ?? []) {
+      const key = getModelGroupKey(model);
+      groups.set(key, [...(groups.get(key) ?? []), model]);
+    }
+    return Array.from(groups, ([key, groupModels]) => ({ key, models: groupModels }));
+  }, [models.data?.models]);
   const balance = me.data?.user.appTokenBalance ?? 0;
   const phoneNumber = me.data?.user.phoneNumber ?? "";
   const isAuthenticated = me.isSuccess;
@@ -317,8 +332,15 @@ export function ChatPage() {
   }, [conversationModelId, modelId]);
 
   useEffect(() => {
-    if (modelSelectionLocked) setModelMenuOpen(false);
+    if (modelSelectionLocked) {
+      setModelMenuOpen(false);
+      setOpenModelGroupKey(null);
+    }
   }, [modelSelectionLocked]);
+
+  useEffect(() => {
+    if (!modelMenuOpen) setOpenModelGroupKey(null);
+  }, [modelMenuOpen]);
 
   useEffect(() => {
     if (!accountMenuOpen && !modelMenuOpen && !revealedDeleteConversationId) return;
@@ -331,6 +353,7 @@ export function ChatPage() {
       setAccountMenuOpen(false);
       setAccountMenuView("main");
       setModelMenuOpen(false);
+      setOpenModelGroupKey(null);
       setRevealedDeleteConversationId(null);
     }
 
@@ -482,6 +505,7 @@ export function ChatPage() {
     setCompletedAssistantMessage(null);
     setStreamingText("");
     setModelMenuOpen(false);
+    setOpenModelGroupKey(null);
     setRevealedDeleteConversationId(null);
     navigate("/");
   }
@@ -680,25 +704,99 @@ export function ChatPage() {
                   {!modelSelectionLocked && <ChevronDown size={15} className="shrink-0 opacity-50" />}
                 </button>
                 {modelMenuOpen && !modelSelectionLocked && (
-                  <div className={`nm-model-menu ${scrollingAreas.modelMenu ? "is-scrolling" : ""}`} onScroll={() => markScrolling("modelMenu")}>
+                  <div
+                    className={`nm-model-menu ${scrollingAreas.modelMenu ? "is-scrolling" : ""}`}
+                    role="menu"
+                    aria-label={t.models}
+                    onScroll={() => markScrolling("modelMenu")}
+                  >
                     <div className="nm-section-label px-2">{t.models}</div>
-                    {models.data?.models.map((model) => (
-                      <button
-                        key={model.id}
-                        className={`nm-model-option ${model.id === modelId ? "is-active" : ""}`}
-                        onClick={() => {
-                          setModelId(model.id);
-                          setModelMenuOpen(false);
-                        }}
-                      >
-                        <ModelLogo model={model} size="sm" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-bold">{getModelDisplayName(model, language)}</span>
-                          <span className="block truncate text-[11px] text-[#808080]">{getModelSubtitle(model, language)}</span>
-                        </span>
-                        {model.id === modelId && <Check size={16} />}
-                      </button>
-                    ))}
+                    {modelGroups.map((group) => {
+                      const groupIsActive = group.models.some((model) => model.id === modelId);
+                      const activeGroupModel = group.models.find((model) => model.id === modelId);
+
+                      if (group.models.length === 1) {
+                        const model = group.models[0];
+                        return (
+                          <button
+                            key={model.id}
+                            className={`nm-model-option ${model.id === modelId ? "is-active" : ""}`}
+                            role="menuitemradio"
+                            aria-checked={model.id === modelId}
+                            onClick={() => {
+                              setModelId(model.id);
+                              setModelMenuOpen(false);
+                            }}
+                          >
+                            <ModelLogo model={model} size="sm" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-bold">{getModelDisplayName(model, language)}</span>
+                              <span className="block truncate text-[11px] text-[#808080]">{getModelSubtitle(model, language)}</span>
+                            </span>
+                            {model.id === modelId && <Check size={16} />}
+                          </button>
+                        );
+                      }
+
+                      const groupIsOpen = openModelGroupKey === group.key;
+                      const representativeModel = activeGroupModel ?? group.models[0];
+                      return (
+                        <div
+                          key={group.key}
+                          className={`nm-model-group ${groupIsOpen ? "is-open" : ""}`}
+                          onPointerEnter={(event) => {
+                            if (event.pointerType === "mouse") setOpenModelGroupKey(group.key);
+                          }}
+                          onPointerLeave={(event) => {
+                            if (event.pointerType === "mouse") setOpenModelGroupKey(null);
+                          }}
+                        >
+                          <button
+                            className={`nm-model-option nm-model-group-trigger ${groupIsActive ? "is-active" : ""}`}
+                            role="menuitem"
+                            aria-haspopup="menu"
+                            aria-expanded={groupIsOpen}
+                            onFocus={() => setOpenModelGroupKey(group.key)}
+                            onClick={() => setOpenModelGroupKey(group.key)}
+                          >
+                            <ModelLogo model={representativeModel} size="sm" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-bold">{getModelDisplayName(group.models[0], language)}</span>
+                              <span className="block truncate text-[11px] text-[#808080]">
+                                {getModelSubtitle(representativeModel, language)}
+                              </span>
+                            </span>
+                            <ChevronRight size={17} className="nm-model-group-chevron" />
+                          </button>
+
+                          {groupIsOpen && (
+                            <div className="nm-model-submenu" role="menu" aria-label={getModelDisplayName(group.models[0], language)}>
+                              {group.models.map((model, index) => {
+                                const subtitle = getModelSubtitle(model, language);
+                                const isActiveModel = model.id === modelId;
+                                const isDefaultModel = !activeGroupModel && index === 0;
+                                return (
+                                  <button
+                                    key={model.id}
+                                    className={`nm-model-submenu-option ${isActiveModel ? "is-active" : ""} ${isDefaultModel ? "is-default" : ""}`}
+                                    role="menuitemradio"
+                                    aria-checked={isActiveModel}
+                                    onClick={() => {
+                                      setModelId(model.id);
+                                      setOpenModelGroupKey(null);
+                                      setModelMenuOpen(false);
+                                    }}
+                                  >
+                                    <span className="min-w-0 flex-1 truncate font-bold">{subtitle}</span>
+                                    {isActiveModel && <Check size={16} />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

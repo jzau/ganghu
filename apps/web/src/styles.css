@@ -794,6 +794,91 @@ textarea {
     box-shadow: inset 3px 3px 6px rgba(160, 160, 160, 0.6), inset -3px -3px 6px rgba(255, 255, 255, 1);
   }
 
+  .nm-model-group {
+    position: relative;
+  }
+
+  .nm-model-group-trigger {
+    cursor: default;
+  }
+
+  .nm-model-group.is-open > .nm-model-group-trigger {
+    background: rgba(128, 128, 128, 0.1);
+  }
+
+  .nm-model-group-chevron {
+    flex: 0 0 auto;
+    opacity: 0.72;
+    transition: transform 0.16s ease;
+  }
+
+  .nm-model-group.is-open .nm-model-group-chevron {
+    transform: translateX(2px);
+  }
+
+  .nm-model-submenu {
+    position: absolute;
+    top: -8px;
+    left: calc(100% - 2px);
+    z-index: 31;
+    display: flex;
+    width: max-content;
+    min-width: 220px;
+    max-width: min(300px, calc(100vw - 40px));
+    max-height: min(420px, calc(100vh - 100px));
+    flex-direction: column;
+    gap: 3px;
+    overflow-y: auto;
+    border: 1px solid rgba(120, 120, 120, 0.16);
+    border-radius: 16px;
+    background: #ececec;
+    padding: 8px;
+    box-shadow: 8px 12px 24px rgba(0, 0, 0, 0.15), 8px 8px 20px rgba(160, 160, 160, 0.6), -6px -6px 16px rgba(255, 255, 255, 1);
+  }
+
+  .nm-model-submenu-option {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+    gap: 12px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #2a2a2a;
+    padding: 11px 12px;
+    text-align: left;
+    font-size: 13px;
+  }
+
+  .nm-model-submenu-option:hover,
+  .nm-model-submenu-option:focus-visible,
+  .nm-model-submenu-option.is-default {
+    background: rgba(128, 128, 128, 0.1);
+  }
+
+  .nm-model-submenu-option.is-active {
+    box-shadow: inset 3px 3px 6px rgba(160, 160, 160, 0.6), inset -3px -3px 6px rgba(255, 255, 255, 1);
+  }
+
+  @media (max-width: 640px) {
+    .nm-model-menu {
+      position: fixed;
+      top: 64px;
+      left: 12px;
+      width: min(260px, calc(100vw - 24px));
+      min-width: min(260px, calc(100vw - 24px));
+      max-width: calc(100vw - 24px);
+    }
+
+    .nm-model-submenu {
+      top: calc(100% - 1px);
+      left: max(0px, calc(100vw - 244px));
+      min-width: min(220px, calc(100vw - 24px));
+      max-width: calc(100vw - 24px);
+    }
+  }
+
   .nm-messages {
     flex: 1;
     padding: 8px clamp(8px, 2vw, 32px) 12px;
