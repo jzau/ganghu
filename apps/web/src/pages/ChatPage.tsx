@@ -1,6 +1,6 @@
 import type { ApiUser, LlmModelDto, MessageDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Send, Sparkles, Square, Ticket, Trash2, Upload, UserRound } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronLeft, ChevronRight, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Send, Sparkles, Square, Ticket, Trash2, Upload, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useNavigate, useParams } from "react-router-dom";
@@ -26,6 +26,7 @@ const chatText = {
     selectModel: "Select model",
     modelsLoading: "Models loading",
     models: "Models",
+    backToModels: "Back to models",
     startConversation: "Start a conversation",
     emptyHint: "Choose a model and send a message.",
     thinking: "Assistant is thinking",
@@ -61,6 +62,7 @@ const chatText = {
     selectModel: "选择模型",
     modelsLoading: "模型加载中",
     models: "模型",
+    backToModels: "返回模型列表",
     startConversation: "开始对话",
     emptyHint: "选择模型并发送消息。",
     thinking: "助手正在思考",
@@ -212,6 +214,7 @@ export function ChatPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [openModelGroupKey, setOpenModelGroupKey] = useState<string | null>(null);
+  const [isCompactModelMenu, setIsCompactModelMenu] = useState(() => window.matchMedia("(max-width: 640px)").matches);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [scrollingAreas, setScrollingAreas] = useState<Record<string, boolean>>({});
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
@@ -260,6 +263,13 @@ export function ChatPage() {
       document.documentElement.classList.remove("nm-chat-document");
       document.body.classList.remove("nm-chat-body");
     };
+  }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 640px)");
+    const updateModelMenuLayout = () => setIsCompactModelMenu(mediaQuery.matches);
+    mediaQuery.addEventListener("change", updateModelMenuLayout);
+    return () => mediaQuery.removeEventListener("change", updateModelMenuLayout);
   }, []);
 
   const allMessages = useMemo<RenderMessage[]>(() => {
@@ -318,6 +328,7 @@ export function ChatPage() {
     }
     return Array.from(groups, ([key, groupModels]) => ({ key, models: groupModels }));
   }, [models.data?.models]);
+  const openModelGroup = modelGroups.find((group) => group.key === openModelGroupKey);
   const balance = me.data?.user.appTokenBalance ?? 0;
   const phoneNumber = me.data?.user.phoneNumber ?? "";
   const isAuthenticated = me.isSuccess;
@@ -710,8 +721,42 @@ export function ChatPage() {
                     aria-label={t.models}
                     onScroll={() => markScrolling("modelMenu")}
                   >
-                    <div className="nm-section-label px-2">{t.models}</div>
-                    {modelGroups.map((group) => {
+                    {isCompactModelMenu && openModelGroup ? (
+                      <div className="nm-model-mobile-submenu">
+                        <button
+                          className="nm-model-mobile-back"
+                          role="menuitem"
+                          aria-label={t.backToModels}
+                          onClick={() => setOpenModelGroupKey(null)}
+                        >
+                          <ChevronLeft size={17} />
+                          <span>{getModelDisplayName(openModelGroup.models[0], language)}</span>
+                        </button>
+                        {openModelGroup.models.map((model) => {
+                          const subtitle = getModelSubtitle(model, language);
+                          const isActiveModel = model.id === modelId;
+                          return (
+                            <button
+                              key={model.id}
+                              className={`nm-model-submenu-option ${isActiveModel ? "is-active" : ""}`}
+                              role="menuitemradio"
+                              aria-checked={isActiveModel}
+                              onClick={() => {
+                                setModelId(model.id);
+                                setOpenModelGroupKey(null);
+                                setModelMenuOpen(false);
+                              }}
+                            >
+                              <span className="min-w-0 flex-1 truncate font-bold">{subtitle}</span>
+                              {isActiveModel && <Check size={16} />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <>
+                        <div className="nm-section-label px-2">{t.models}</div>
+                        {modelGroups.map((group) => {
                       const groupIsActive = group.models.some((model) => model.id === modelId);
                       const activeGroupModel = group.models.find((model) => model.id === modelId);
 
@@ -745,10 +790,12 @@ export function ChatPage() {
                           key={group.key}
                           className={`nm-model-group ${groupIsOpen ? "is-open" : ""}`}
                           onPointerEnter={(event) => {
-                            if (event.pointerType === "mouse") setOpenModelGroupKey(group.key);
+                            if (event.pointerType === "mouse" && window.matchMedia("(min-width: 641px)").matches) {
+                              setOpenModelGroupKey(group.key);
+                            }
                           }}
                           onPointerLeave={(event) => {
-                            if (event.pointerType === "mouse") setOpenModelGroupKey(null);
+                            if (event.pointerType === "mouse" && !isCompactModelMenu) setOpenModelGroupKey(null);
                           }}
                         >
                           <button
@@ -756,7 +803,9 @@ export function ChatPage() {
                             role="menuitem"
                             aria-haspopup="menu"
                             aria-expanded={groupIsOpen}
-                            onFocus={() => setOpenModelGroupKey(group.key)}
+                            onFocus={() => {
+                              if (!isCompactModelMenu) setOpenModelGroupKey(group.key);
+                            }}
                             onClick={() => setOpenModelGroupKey(group.key)}
                           >
                             <ModelLogo model={representativeModel} size="sm" />
@@ -769,16 +818,15 @@ export function ChatPage() {
                             <ChevronRight size={17} className="nm-model-group-chevron" />
                           </button>
 
-                          {groupIsOpen && (
+                          {groupIsOpen && !isCompactModelMenu && (
                             <div className="nm-model-submenu" role="menu" aria-label={getModelDisplayName(group.models[0], language)}>
-                              {group.models.map((model, index) => {
+                              {group.models.map((model) => {
                                 const subtitle = getModelSubtitle(model, language);
                                 const isActiveModel = model.id === modelId;
-                                const isDefaultModel = !activeGroupModel && index === 0;
                                 return (
                                   <button
                                     key={model.id}
-                                    className={`nm-model-submenu-option ${isActiveModel ? "is-active" : ""} ${isDefaultModel ? "is-default" : ""}`}
+                                    className={`nm-model-submenu-option ${isActiveModel ? "is-active" : ""}`}
                                     role="menuitemradio"
                                     aria-checked={isActiveModel}
                                     onClick={() => {
@@ -796,7 +844,9 @@ export function ChatPage() {
                           )}
                         </div>
                       );
-                    })}
+                        })}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
