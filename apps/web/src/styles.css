@@ -788,12 +788,20 @@ textarea {
   }
 
   @media (hover: hover) and (pointer: fine) {
-    .nm-model-option:hover:not(.is-active) {
-      background: rgba(128, 128, 128, 0.08);
+    .nm-model-option:hover:not(.is-active),
+    .nm-model-group.is-open > .nm-model-group-trigger:hover:not(.is-active) {
+      background: #ececec;
+      box-shadow: 3px 3px 7px rgba(160, 160, 160, 0.55), -3px -3px 7px rgba(255, 255, 255, 0.95);
     }
 
     .nm-model-submenu-option:hover:not(.is-active) {
-      background: rgba(128, 128, 128, 0.08);
+      background: #ececec;
+      box-shadow: 3px 3px 7px rgba(160, 160, 160, 0.55), -3px -3px 7px rgba(255, 255, 255, 0.95);
+    }
+
+    .nm-model-option:active:not(.is-active),
+    .nm-model-submenu-option:active:not(.is-active) {
+      box-shadow: inset 2px 2px 4px rgba(160, 160, 160, 0.5), inset -2px -2px 4px rgba(255, 255, 255, 0.9);
     }
   }
 
