@@ -26,6 +26,7 @@ const chatText = {
     selectModel: "Select model",
     modelsLoading: "Models loading",
     models: "Models",
+    modelCount: (count: number) => `${count} models`,
     startConversation: "Start a conversation",
     emptyHint: "Choose a model and send a message.",
     thinking: "Assistant is thinking",
@@ -61,6 +62,7 @@ const chatText = {
     selectModel: "选择模型",
     modelsLoading: "模型加载中",
     models: "模型",
+    modelCount: (count: number) => `${count} 个模型`,
     startConversation: "开始对话",
     emptyHint: "选择模型并发送消息。",
     thinking: "助手正在思考",
@@ -765,7 +767,7 @@ export function ChatPage() {
                             <span className="min-w-0 flex-1">
                               <span className="block truncate font-bold">{getModelDisplayName(group.models[0], language)}</span>
                               <span className="block truncate text-[11px] text-[#808080]">
-                                {getModelSubtitle(representativeModel, language)}
+                                {activeGroupModel ? getModelSubtitle(activeGroupModel, language) : t.modelCount(group.models.length)}
                               </span>
                             </span>
                             <ChevronRight size={17} className="nm-model-group-chevron" />
