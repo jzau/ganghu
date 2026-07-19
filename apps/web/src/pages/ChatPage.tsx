@@ -733,7 +733,6 @@ export function ChatPage() {
                               <span className="block truncate font-bold">{getModelDisplayName(model, language)}</span>
                               <span className="block truncate text-[11px] text-[#808080]">{getModelSubtitle(model, language)}</span>
                             </span>
-                            {model.id === modelId && <Check size={16} />}
                           </button>
                         );
                       }
@@ -790,7 +789,6 @@ export function ChatPage() {
                                     }}
                                   >
                                     <span className="min-w-0 flex-1 truncate font-bold">{subtitle}</span>
-                                    {isActiveModel && <Check size={16} />}
                                   </button>
                                 );
                               })}
