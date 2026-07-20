@@ -880,18 +880,18 @@ textarea {
       position: absolute;
       top: calc(100% + 8px);
       left: -50px;
-      width: min(260px, calc(100vw - 24px));
-      min-width: min(260px, calc(100vw - 24px));
-      max-width: calc(100vw - 24px);
+      width: min(220px, 52vw);
+      min-width: min(220px, 52vw);
+      max-width: 52vw;
     }
 
     .nm-model-submenu {
-      top: calc(100% - 1px);
-      left: 28px;
+      top: -8px;
+      left: calc(100% - 2px);
       box-sizing: border-box;
-      width: calc(100% - 28px);
-      min-width: 0;
-      max-width: calc(100% - 28px);
+      width: min(170px, 40vw);
+      min-width: min(132px, 40vw);
+      max-width: 40vw;
     }
   }
 
