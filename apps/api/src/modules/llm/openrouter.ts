@@ -24,6 +24,8 @@ type OpenRouterUsage = {
 };
 
 const nonStreamingFirstModels = new Set(["tencent/hy3", "tencent/hy3:free"]);
+const modelCapabilityCache = new Map<string, { supportsTools: boolean; expiresAt: number }>();
+const modelCapabilityCacheTtlMs = 10 * 60 * 1000;
 
 export class OpenRouterError extends Error {
   constructor(
@@ -50,10 +52,30 @@ export async function getOpenRouterModelEndpointCount(model: string) {
   return Array.isArray(payload.data?.endpoints) ? payload.data.endpoints.length : 0;
 }
 
+export async function getOpenRouterModelSupportsTools(model: string) {
+  const cached = modelCapabilityCache.get(model);
+  if (cached && cached.expiresAt > Date.now()) return cached.supportsTools;
+
+  const headers: Record<string, string> = {};
+  if (env.OPENROUTER_API_KEY) headers.Authorization = `Bearer ${env.OPENROUTER_API_KEY}`;
+
+  const response = await fetch(`${env.OPENROUTER_BASE_URL}/model/${encodeModelPath(model)}`, { headers });
+  if (!response.ok) {
+    const providerMessage = await readOpenRouterError(response);
+    throw new OpenRouterError(`OpenRouter model lookup failed with status ${response.status}`, response.status, providerMessage);
+  }
+
+  const payload = (await response.json()) as { data?: { supported_parameters?: unknown[] } };
+  const supportsTools = Array.isArray(payload.data?.supported_parameters) && payload.data.supported_parameters.includes("tools");
+  modelCapabilityCache.set(model, { supportsTools, expiresAt: Date.now() + modelCapabilityCacheTtlMs });
+  return supportsTools;
+}
+
 export async function* streamOpenRouterChat(input: {
   model: string;
   messages: LlmChatMessage[];
   maxTokens: number;
+  webSearch?: boolean;
   signal?: AbortSignal;
 }): AsyncGenerator<{ delta: string }, StreamResult> {
   if (!env.OPENROUTER_API_KEY) {
@@ -149,7 +171,7 @@ function shouldUseNonStreamingFirst(model: string) {
   return nonStreamingFirstModels.has(model);
 }
 
-async function completeOpenRouterChat(input: { model: string; messages: LlmChatMessage[]; maxTokens: number; signal?: AbortSignal }): Promise<StreamResult> {
+async function completeOpenRouterChat(input: { model: string; messages: LlmChatMessage[]; maxTokens: number; webSearch?: boolean; signal?: AbortSignal }): Promise<StreamResult> {
   const response = await requestOpenRouterChat(input, false);
   if (!response.ok) {
     const providerMessage = await readOpenRouterError(response);
@@ -174,7 +196,7 @@ async function completeOpenRouterChat(input: { model: string; messages: LlmChatM
   };
 }
 
-function requestOpenRouterChat(input: { model: string; messages: LlmChatMessage[]; maxTokens: number; signal?: AbortSignal }, stream: boolean) {
+function requestOpenRouterChat(input: { model: string; messages: LlmChatMessage[]; maxTokens: number; webSearch?: boolean; signal?: AbortSignal }, stream: boolean) {
   return fetch(`${env.OPENROUTER_BASE_URL}/chat/completions`, {
     method: "POST",
     signal: input.signal,
@@ -189,7 +211,8 @@ function requestOpenRouterChat(input: { model: string; messages: LlmChatMessage[
       messages: input.messages,
       max_tokens: input.maxTokens,
       stream,
-      usage: { include: true }
+      usage: { include: true },
+      ...(input.webSearch ? { tools: [{ type: "openrouter:web_search" }] } : {})
     })
   });
 }

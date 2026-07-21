@@ -88,7 +88,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/models", { preHandler: app.authenticateAdmin }, async () => {
     const models = await prisma.llmModel.findMany({ orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }] });
-    return { models: models.map(toModelDto) };
+    return { models: models.map((model) => toModelDto(model)) };
   });
 
   app.post("/models", { preHandler: app.authenticateAdmin }, async (request) => {

@@ -1,15 +1,22 @@
 import type { FastifyPluginAsync } from "fastify";
 import { nanoid } from "nanoid";
 import { z } from "zod";
+import { env } from "../../lib/env.js";
 import { toConversationDto, toMessageDto } from "../../lib/mapper.js";
 import { prisma } from "../../lib/prisma.js";
+import { buildExternalSearchContext } from "../context/external-content.js";
 import { estimateTokens, OpenRouterError, streamOpenRouterChat, type LlmChatMessage } from "../llm/openrouter.js";
+import type { SearchResult } from "../search/contracts.js";
+import { SearchError } from "../search/search-error.js";
+import { isPlatformSearchConfigured, resolveSearchMode, searchForMessage, shouldSearchAutomatically } from "../search/search-service.js";
 
 const createConversationSchema = z.object({ title: z.string().min(1).max(120).optional() });
 const chatSchema = z.object({
   conversationId: z.string().optional(),
   modelId: z.string(),
-  message: z.string().min(1).max(12000)
+  message: z.string().min(1).max(12000),
+  searchMode: z.enum(["off", "explicit", "auto"]).optional(),
+  webSearch: z.boolean().optional()
 });
 const defaultConversationTitles = new Set(["New chat", "新建对话"]);
 
@@ -95,6 +102,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
   app.post("/chat/stream", { preHandler: app.authenticateUser }, async (request, reply) => {
     const startedAt = Date.now();
     const input = chatSchema.parse(request.body);
+    const searchMode = resolveSearchMode(input);
     const userId = request.user!.id;
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const model = await prisma.llmModel.findFirst({ where: { id: input.modelId, enabled: true } });
@@ -102,6 +110,9 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     if (!model) return reply.code(404).send({ message: "Model not found" });
     if (model.provider !== "openrouter") {
       return reply.code(400).send({ message: "Only OpenRouter models are supported" });
+    }
+    if (searchMode === "explicit" && !isPlatformSearchConfigured()) {
+      return reply.code(503).send({ message: "Web search is not configured. Add TAVILY_API_KEY on the server." });
     }
     if (user.appTokenBalance < model.minimumRequiredBalance) {
       return reply.code(402).send({ message: "Not enough app tokens" });
@@ -135,9 +146,12 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       conversation: toConversationDto(conversation),
       message: toMessageDto(userMessage)
     });
+    const runId = nanoid();
+    writeEvent(reply, "run_started", { runId, searchMode });
 
     const streamAbortController = new AbortController();
     reply.raw.once("close", () => streamAbortController.abort());
+    const runDeadline = Date.now() + env.AGENT_RUN_TIMEOUT_MS;
 
     const history = await prisma.message.findMany({
       where: { conversationId: conversation.id },
@@ -145,13 +159,47 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       take: 80
     });
     history.reverse();
-    const llmMessages = trimMessages(
-      history.map((message) => ({ role: message.role as LlmChatMessage["role"], content: message.content })),
-      model.contextWindowTokens - model.maxOutputTokens
-    );
+    const conversationMessages = history.map((message) => ({ role: message.role as LlmChatMessage["role"], content: message.content }));
 
     let partialAssistantContent = "";
+    let searchResults: SearchResult[] = [];
+    let searchCompleted = false;
     try {
+      const shouldSearch = isPlatformSearchConfigured() && (searchMode === "explicit" || (searchMode === "auto" && shouldSearchAutomatically(input.message)));
+      if (shouldSearch) {
+        const queryId = nanoid();
+        writeEvent(reply, "search_started", { queryId, query: input.message });
+        try {
+          const search = await searchForMessage({
+            message: input.message,
+            signal: streamAbortController.signal,
+            deadline: runDeadline
+          });
+          searchResults = search.results;
+          searchCompleted = true;
+          writeEvent(reply, "search_results", { queryId, sources: searchResults });
+          request.log.info({
+            run_id: runId,
+            search_provider: search.provider,
+            search_result_count: searchResults.length,
+            search_duration_ms: search.durationMs,
+            search_request_id: search.requestId,
+            search_cost: search.cost
+          }, "web search completed");
+        } catch (error) {
+          if (searchMode === "explicit" || streamAbortController.signal.aborted) throw error;
+          request.log.warn({ error, run_id: runId }, "automatic web search failed; continuing without search evidence");
+        }
+      }
+
+      const externalContext = searchCompleted ? buildExternalSearchContext(searchResults) : undefined;
+      const contextBudget = model.contextWindowTokens - model.maxOutputTokens;
+      const llmMessages = trimMessages(
+        conversationMessages,
+        Math.max(1, contextBudget - (externalContext ? estimateTokens(externalContext) : 0))
+      );
+      if (externalContext) llmMessages.unshift({ role: "system", content: externalContext });
+
       const stream = streamOpenRouterChat({
         model: model.providerModelId,
         messages: llmMessages,
@@ -218,6 +266,9 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         user_id: userId,
         selected_model_id: model.id,
         provider_model_id: model.providerModelId,
+        run_id: runId,
+        search_mode: searchMode,
+        search_source_count: searchResults.length,
         prompt_tokens: result.value.usage.promptTokens,
         completion_tokens: result.value.usage.completionTokens,
         total_tokens: result.value.usage.totalTokens,
@@ -227,6 +278,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
 
       writeEvent(reply, "done", {
         message: toMessageDto(assistantMessage),
+        sources: searchResults,
         usage: {
           ...result.value.usage,
           totalAppTokensCharged: totalCharge,
@@ -265,8 +317,11 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
           selected_model_id: model.id,
           provider: model.provider,
           provider_model_id: model.providerModelId,
+          run_id: runId,
+          search_mode: searchMode,
           upstream_status: error instanceof OpenRouterError ? error.status : undefined,
-          upstream_message: error instanceof OpenRouterError ? error.providerMessage : undefined
+          upstream_message: error instanceof OpenRouterError ? error.providerMessage : undefined,
+          search_error_code: error instanceof SearchError ? error.code : undefined
         },
         "chat stream failed"
       );
@@ -347,6 +402,13 @@ function trimMessages(messages: LlmChatMessage[], maxTokens: number) {
 }
 
 function toChatStreamError(error: unknown) {
+  if (error instanceof SearchError) {
+    return {
+      code: `SEARCH_${error.code.toUpperCase()}`,
+      message: friendlySearchMessage(error),
+      retryable: error.retryable
+    };
+  }
   if (error instanceof OpenRouterError) {
     return {
       code: "OPENROUTER_REQUEST_FAILED",
@@ -355,6 +417,14 @@ function toChatStreamError(error: unknown) {
   }
 
   return { code: "CHAT_STREAM_FAILED", message: "Chat failed" };
+}
+
+function friendlySearchMessage(error: SearchError) {
+  if (error.code === "authentication" || error.code === "not_configured") return "Web search is not configured correctly.";
+  if (error.code === "rate_limited") return "Web search is rate limited. Please try again shortly.";
+  if (error.code === "timeout") return "Web search timed out. Please try again.";
+  if (error.code === "cancelled") return "Web search was cancelled.";
+  return "Web search is temporarily unavailable. Please try again.";
 }
 
 function friendlyOpenRouterMessage(error: OpenRouterError) {

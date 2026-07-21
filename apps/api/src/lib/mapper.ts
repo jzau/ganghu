@@ -21,7 +21,7 @@ export function toUserDto(user: User): ApiUser {
   };
 }
 
-export function toModelDto(model: LlmModel): LlmModelDto {
+export function toModelDto(model: LlmModel, capabilities: { supportsWebSearch?: boolean } = {}): LlmModelDto {
   return {
     id: model.id,
     displayName: model.displayName,
@@ -37,7 +37,8 @@ export function toModelDto(model: LlmModel): LlmModelDto {
     minimumRequiredBalance: model.minimumRequiredBalance,
     maxOutputTokens: model.maxOutputTokens,
     contextWindowTokens: model.contextWindowTokens,
-    sortOrder: model.sortOrder
+    sortOrder: model.sortOrder,
+    supportsWebSearch: capabilities.supportsWebSearch ?? false
   };
 }
 

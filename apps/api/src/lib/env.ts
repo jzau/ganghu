@@ -23,7 +23,12 @@ const schema = z.object({
   OPENROUTER_API_KEY: z.string().optional().default(""),
   OPENROUTER_BASE_URL: z.string().url().default("https://openrouter.ai/api/v1"),
   OPENROUTER_SITE_URL: z.string().optional().default("http://localhost:5173"),
-  OPENROUTER_APP_NAME: z.string().optional().default("GANGHU AI")
+  OPENROUTER_APP_NAME: z.string().optional().default("GANGHU AI"),
+  TAVILY_API_KEY: z.string().optional().default(""),
+  TAVILY_BASE_URL: z.string().url().default("https://api.tavily.com"),
+  SEARCH_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
+  SEARCH_MAX_RESULTS: z.coerce.number().int().min(1).max(8).default(5),
+  AGENT_RUN_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(60_000)
 });
 
 export const env = schema.parse(process.env);

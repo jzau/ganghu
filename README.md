@@ -30,7 +30,7 @@ V1 modular monolith for GANGHU AI, also named 工夫, with phone OTP login, app-
    npm run dev
    ```
 
-The mock OTP code is `000000`. If `OPENROUTER_API_KEY` is empty, chat returns a local fallback response while still exercising persistence and billing.
+The mock OTP code is `000000`. If `OPENROUTER_API_KEY` is empty, chat returns a local fallback response while still exercising persistence and billing. Set `TAVILY_API_KEY` to enable provider-independent web search for every configured answer model. The chat API accepts `searchMode: "off" | "explicit" | "auto"`; the legacy `webSearch: true` input remains compatible and maps to explicit search.
 
 ## Deployment
 
