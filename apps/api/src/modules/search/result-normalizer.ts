@@ -15,6 +15,7 @@ export function normalizeAndDeduplicateResults(results: SearchResult[], maxResul
       title: sanitizeText(result.title, 300) || new URL(url).hostname,
       url,
       snippet: sanitizeText(result.snippet, 2_000),
+      rawContent: result.rawContent ? sanitizeText(result.rawContent, 8_000) : undefined,
       rank: unique.size + 1
     });
     if (unique.size >= maxResults) break;
@@ -41,4 +42,3 @@ export function canonicalizeHttpUrl(value: string) {
 export function sanitizeText(value: string, maxLength: number) {
   return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
-

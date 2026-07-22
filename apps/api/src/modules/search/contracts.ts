@@ -5,6 +5,10 @@ export interface SearchRequest {
   maxResults: number;
   language?: string;
   freshness?: "day" | "week" | "month" | "year";
+  topic?: "general" | "news" | "finance";
+  searchDepth?: "advanced" | "basic" | "fast" | "ultra-fast";
+  includeRawContent?: boolean | "markdown" | "text";
+  chunksPerSource?: 1 | 2 | 3;
 }
 
 export interface SearchResult {
@@ -12,7 +16,9 @@ export interface SearchResult {
   title: string;
   url: string;
   snippet: string;
+  rawContent?: string;
   publishedAt?: string;
+  relevanceScore?: number;
   provider: string;
   rank: number;
 }
@@ -38,4 +44,3 @@ export interface SearchExecution extends SearchProviderResponse {
   durationMs: number;
   fallbackUsed: boolean;
 }
-

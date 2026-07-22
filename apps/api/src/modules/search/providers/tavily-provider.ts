@@ -4,7 +4,14 @@ import { SearchError } from "../search-error.js";
 interface TavilyPayload {
   request_id?: unknown;
   usage?: { credits?: unknown };
-  results?: Array<{ title?: unknown; url?: unknown; content?: unknown; published_date?: unknown }>;
+  results?: Array<{
+    title?: unknown;
+    url?: unknown;
+    content?: unknown;
+    raw_content?: unknown;
+    published_date?: unknown;
+    score?: unknown;
+  }>;
 }
 
 export class TavilyProvider implements SearchProvider {
@@ -29,12 +36,14 @@ export class TavilyProvider implements SearchProvider {
         },
         body: JSON.stringify({
           query: request.query,
-          search_depth: "fast",
+          search_depth: request.searchDepth ?? "fast",
           max_results: request.maxResults,
+          topic: request.topic ?? "general",
           include_answer: false,
-          include_raw_content: false,
+          include_raw_content: request.includeRawContent ?? false,
           include_images: false,
           include_usage: true,
+          ...(request.chunksPerSource ? { chunks_per_source: request.chunksPerSource } : {}),
           ...(request.freshness ? { time_range: request.freshness } : {})
         })
       });
@@ -63,7 +72,9 @@ export class TavilyProvider implements SearchProvider {
           title: typeof result.title === "string" ? result.title : "Untitled source",
           url: result.url,
           snippet: typeof result.content === "string" ? result.content : "",
+          rawContent: typeof result.raw_content === "string" ? result.raw_content : undefined,
           publishedAt: typeof result.published_date === "string" ? result.published_date : undefined,
+          relevanceScore: typeof result.score === "number" ? result.score : undefined,
           provider: this.id,
           rank: index + 1
         }];
@@ -83,4 +94,3 @@ async function readSafeError(response: Response) {
     return `Search provider returned status ${response.status}`;
   }
 }
-

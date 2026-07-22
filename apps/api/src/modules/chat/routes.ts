@@ -4,11 +4,12 @@ import { z } from "zod";
 import { env } from "../../lib/env.js";
 import { toConversationDto, toMessageDto } from "../../lib/mapper.js";
 import { prisma } from "../../lib/prisma.js";
+import { buildAssistantInstructions } from "../context/assistant-instructions.js";
 import { buildExternalSearchContext } from "../context/external-content.js";
 import { estimateTokens, OpenRouterError, streamOpenRouterChat, type LlmChatMessage } from "../llm/openrouter.js";
 import type { SearchResult } from "../search/contracts.js";
 import { SearchError } from "../search/search-error.js";
-import { isPlatformSearchConfigured, resolveSearchMode, searchForMessage, shouldSearchAutomatically } from "../search/search-service.js";
+import { isPlatformSearchConfigured, planAutomaticSearch, resolveSearchMode, searchForMessage, searchForPlan } from "../search/search-service.js";
 
 const createConversationSchema = z.object({ title: z.string().min(1).max(120).optional() });
 const chatSchema = z.object({
@@ -164,16 +165,27 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     let searchResults: SearchResult[] = [];
     let searchCompleted = false;
     try {
-      const shouldSearch = isPlatformSearchConfigured() && (searchMode === "explicit" || (searchMode === "auto" && shouldSearchAutomatically(input.message)));
+      const autoSearchPlan = planAutomaticSearch({
+        message: input.message,
+        recentMessages: conversationMessages
+      });
+      const shouldSearch = isPlatformSearchConfigured() && (searchMode === "explicit" || (searchMode === "auto" && autoSearchPlan.needsSearch));
       if (shouldSearch) {
         const queryId = nanoid();
-        writeEvent(reply, "search_started", { queryId, query: input.message });
+        const searchQuery = searchMode === "auto" ? autoSearchPlan.query! : input.message;
+        writeEvent(reply, "search_started", { queryId, query: searchQuery });
         try {
-          const search = await searchForMessage({
-            message: input.message,
-            signal: streamAbortController.signal,
-            deadline: runDeadline
-          });
+          const search = searchMode === "auto"
+            ? await searchForPlan({
+              plan: autoSearchPlan,
+              signal: streamAbortController.signal,
+              deadline: runDeadline
+            })
+            : await searchForMessage({
+              message: input.message,
+              signal: streamAbortController.signal,
+              deadline: runDeadline
+            });
           searchResults = search.results;
           searchCompleted = true;
           writeEvent(reply, "search_results", { queryId, sources: searchResults });
@@ -191,13 +203,16 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
+      const assistantInstructions = buildAssistantInstructions(autoSearchPlan.category);
       const externalContext = searchCompleted ? buildExternalSearchContext(searchResults) : undefined;
+      const systemContextTokens = estimateTokens(assistantInstructions) + (externalContext ? estimateTokens(externalContext) : 0);
       const contextBudget = model.contextWindowTokens - model.maxOutputTokens;
       const llmMessages = trimMessages(
         conversationMessages,
-        Math.max(1, contextBudget - (externalContext ? estimateTokens(externalContext) : 0))
+        Math.max(1, contextBudget - systemContextTokens)
       );
-      if (externalContext) llmMessages.unshift({ role: "system", content: externalContext });
+      llmMessages.unshift({ role: "system", content: assistantInstructions });
+      if (externalContext) llmMessages.splice(1, 0, { role: "system", content: externalContext });
 
       const stream = streamOpenRouterChat({
         model: model.providerModelId,
