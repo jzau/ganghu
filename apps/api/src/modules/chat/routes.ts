@@ -15,8 +15,7 @@ const chatSchema = z.object({
   conversationId: z.string().optional(),
   modelId: z.string(),
   message: z.string().min(1).max(12000),
-  searchMode: z.enum(["off", "explicit", "auto"]).optional(),
-  webSearch: z.boolean().optional()
+  searchMode: z.enum(["off", "explicit", "auto"]).optional()
 });
 const defaultConversationTitles = new Set(["New chat", "新建对话"]);
 

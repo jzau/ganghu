@@ -1,6 +1,6 @@
-import type { ApiUser, LlmModelDto, MessageDto, SearchMode } from "@ai-chat/shared";
+import type { ApiUser, LlmModelDto, MessageDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Globe2, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Send, Sparkles, Square, Ticket, Trash2, Upload, UserRound } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Send, Sparkles, Square, Ticket, Trash2, Upload, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useNavigate, useParams } from "react-router-dom";
@@ -31,13 +31,6 @@ const chatText = {
     emptyHint: "Choose a model and send a message.",
     thinking: "Assistant is thinking",
     messagePlaceholder: "Message",
-    searchMode: "Web search mode",
-    searchOff: "Off",
-    searchOffHint: "Never search",
-    searchAuto: "Auto",
-    searchAutoHint: "Search when current information is needed",
-    searchAlways: "Always",
-    searchAlwaysHint: "Search before every answer",
     sendMessage: "Send message",
     stopResponse: "Stop response",
     redeemCode: "Redeem code",
@@ -74,13 +67,6 @@ const chatText = {
     emptyHint: "选择模型并发送消息。",
     thinking: "助手正在思考",
     messagePlaceholder: "输入消息",
-    searchMode: "网页搜索模式",
-    searchOff: "关闭",
-    searchOffHint: "不使用网页搜索",
-    searchAuto: "自动",
-    searchAutoHint: "需要最新信息时自动搜索",
-    searchAlways: "始终",
-    searchAlwaysHint: "每次回答前都搜索",
     sendMessage: "发送消息",
     stopResponse: "停止回复",
     redeemCode: "兑换码",
@@ -205,7 +191,6 @@ export function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
-  const searchControlRef = useRef<HTMLDivElement | null>(null);
   const composingMessageRef = useRef(false);
   const sendInFlightRef = useRef(false);
   const streamAbortControllerRef = useRef<AbortController | null>(null);
@@ -217,8 +202,6 @@ export function ChatPage() {
   const scrollHideTimeouts = useRef<Record<string, number>>({});
   const [activeConversationId, setActiveConversationId] = useState<string>(routeConversationId);
   const [draft, setDraft] = useState("");
-  const [searchMode, setSearchMode] = useState<SearchMode>("off");
-  const [searchMenuOpen, setSearchMenuOpen] = useState(false);
   const [modelId, setModelId] = useState("");
   const [pendingUserMessage, setPendingUserMessage] = useState<MessageDto | null>(null);
   const [completedAssistantMessage, setCompletedAssistantMessage] = useState<MessageDto | null>(null);
@@ -337,7 +320,6 @@ export function ChatPage() {
     }
     return Array.from(groups, ([key, groupModels]) => ({ key, models: groupModels }));
   }, [models.data?.models]);
-  const canUseWebSearch = selectedModel?.supportsWebSearch === true;
   const balance = me.data?.user.appTokenBalance ?? 0;
   const phoneNumber = me.data?.user.phoneNumber ?? "";
   const isAuthenticated = me.isSuccess;
@@ -352,13 +334,6 @@ export function ChatPage() {
   }, [conversationModelId, modelId]);
 
   useEffect(() => {
-    if (selectedModel && !selectedModel.supportsWebSearch) {
-      setSearchMode("off");
-      setSearchMenuOpen(false);
-    }
-  }, [selectedModel]);
-
-  useEffect(() => {
     if (modelSelectionLocked) {
       setModelMenuOpen(false);
       setOpenModelGroupKey(null);
@@ -370,24 +345,23 @@ export function ChatPage() {
   }, [modelMenuOpen]);
 
   useEffect(() => {
-    if (!accountMenuOpen && !modelMenuOpen && !searchMenuOpen && !revealedDeleteConversationId) return;
+    if (!accountMenuOpen && !modelMenuOpen && !revealedDeleteConversationId) return;
 
     function closeMenusOnOutsidePointer(event: PointerEvent) {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (accountMenuRef.current?.contains(target) || modelMenuRef.current?.contains(target) || searchControlRef.current?.contains(target)) return;
+      if (accountMenuRef.current?.contains(target) || modelMenuRef.current?.contains(target)) return;
       if (target instanceof Element && target.closest(".nm-history-item")) return;
       setAccountMenuOpen(false);
       setAccountMenuView("main");
       setModelMenuOpen(false);
-      setSearchMenuOpen(false);
       setOpenModelGroupKey(null);
       setRevealedDeleteConversationId(null);
     }
 
     document.addEventListener("pointerdown", closeMenusOnOutsidePointer);
     return () => document.removeEventListener("pointerdown", closeMenusOnOutsidePointer);
-  }, [accountMenuOpen, modelMenuOpen, revealedDeleteConversationId, searchMenuOpen]);
+  }, [accountMenuOpen, modelMenuOpen, revealedDeleteConversationId]);
 
   useEffect(() => {
     if (!activeConversationId) return;
@@ -423,7 +397,6 @@ export function ChatPage() {
     setCompletedAssistantMessage(null);
     setStreamingText("");
     setToastMessage("");
-    setSearchMenuOpen(false);
     sendInFlightRef.current = true;
     stopRequestedRef.current = false;
     const abortController = new AbortController();
@@ -438,12 +411,7 @@ export function ChatPage() {
         signal: abortController.signal,
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conversationId: activeConversationId || undefined,
-          modelId,
-          message,
-          searchMode: canUseWebSearch ? searchMode : "off"
-        })
+        body: JSON.stringify({ conversationId: activeConversationId || undefined, modelId, message, searchMode: "auto" })
       });
       if (!response.ok) {
         const error = await response.json().catch(() => ({ message: t.chatFailed }));
@@ -900,51 +868,8 @@ export function ChatPage() {
                     }
                   }}
                 />
-                {canUseWebSearch && (
-                  <div className="nm-search-control" ref={searchControlRef}>
-                    {searchMenuOpen && (
-                      <div className="nm-search-menu" role="listbox" aria-label={t.searchMode}>
-                        {([
-                          ["off", t.searchOff, t.searchOffHint],
-                          ["auto", t.searchAuto, t.searchAutoHint],
-                          ["explicit", t.searchAlways, t.searchAlwaysHint]
-                        ] as const).map(([mode, label, hint]) => (
-                          <button
-                            key={mode}
-                            type="button"
-                            role="option"
-                            aria-selected={searchMode === mode}
-                            className={`nm-search-option ${searchMode === mode ? "is-selected" : ""}`}
-                            onClick={() => {
-                              setSearchMode(mode);
-                              setSearchMenuOpen(false);
-                            }}
-                          >
-                            <span className="nm-search-option-check">{searchMode === mode && <Check size={14} />}</span>
-                            <span>
-                              <strong>{label}</strong>
-                              <small>{hint}</small>
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      className={`nm-web-search-button ${searchMode !== "off" ? "is-active" : ""} is-${searchMode}`}
-                      onClick={() => setSearchMenuOpen((open) => !open)}
-                      aria-label={`${t.searchMode}: ${searchMode === "off" ? t.searchOff : searchMode === "auto" ? t.searchAuto : t.searchAlways}`}
-                      aria-haspopup="listbox"
-                      aria-expanded={searchMenuOpen}
-                      disabled={isSending}
-                    >
-                      <Globe2 size={18} />
-                      {searchMode !== "off" && <span className="nm-web-search-indicator" aria-hidden="true">{searchMode === "auto" ? "A" : ""}</span>}
-                    </button>
-                  </div>
-                )}
                 <Button
-                  className={`nm-send-button !h-11 !w-11 px-0 disabled:!cursor-default ${isSending ? "is-stop" : ""}`}
+                  className={`nm-send-button px-0 disabled:!cursor-default ${isSending ? "is-stop" : ""}`}
                   onClick={isSending ? stopResponse : sendMessage}
                   aria-label={isSending ? t.stopResponse : t.sendMessage}
                   disabled={isSending ? false : !draft.trim() || !modelId || conversationIsLoading}

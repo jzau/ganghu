@@ -9,8 +9,8 @@ export function isPlatformSearchConfigured() {
   return Boolean(env.TAVILY_API_KEY);
 }
 
-export function resolveSearchMode(input: { searchMode?: SearchMode; webSearch?: boolean }): SearchMode {
-  return input.searchMode ?? (input.webSearch ? "explicit" : "off");
+export function resolveSearchMode(input: { searchMode?: SearchMode }): SearchMode {
+  return input.searchMode ?? "auto";
 }
 
 export function shouldSearchAutomatically(message: string) {
@@ -29,4 +29,3 @@ export async function searchForMessage(input: {
   };
   return gateway.search(request, { signal: input.signal, deadline: input.deadline });
 }
-

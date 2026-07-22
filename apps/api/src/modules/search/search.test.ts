@@ -3,7 +3,7 @@ import test from "node:test";
 import { buildExternalSearchContext } from "../context/external-content.js";
 import { TavilyProvider } from "./providers/tavily-provider.js";
 import { normalizeAndDeduplicateResults } from "./result-normalizer.js";
-import { shouldSearchAutomatically } from "./search-service.js";
+import { resolveSearchMode, shouldSearchAutomatically } from "./search-service.js";
 
 test("normalizes URLs, removes tracking, and deduplicates sources", () => {
   const results = normalizeAndDeduplicateResults([
@@ -22,6 +22,12 @@ test("detects freshness-sensitive prompts in English and Chinese", () => {
   assert.equal(shouldSearchAutomatically("What is the latest Bitcoin price?"), true);
   assert.equal(shouldSearchAutomatically("今天上海天气怎么样？"), true);
   assert.equal(shouldSearchAutomatically("Explain binary search"), false);
+});
+
+test("defaults omitted search mode to auto and preserves explicit overrides", () => {
+  assert.equal(resolveSearchMode({}), "auto");
+  assert.equal(resolveSearchMode({ searchMode: "off" }), "off");
+  assert.equal(resolveSearchMode({ searchMode: "explicit" }), "explicit");
 });
 
 test("external evidence is marked untrusted and retains source identifiers", () => {

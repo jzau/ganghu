@@ -30,7 +30,6 @@ export interface LlmModelDto {
   maxOutputTokens: number;
   contextWindowTokens: number;
   sortOrder: number;
-  supportsWebSearch: boolean;
 }
 
 export interface ConversationDto {

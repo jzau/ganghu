@@ -9,9 +9,9 @@ Primary goal: evolve the current OpenRouter-specific chat flow into a fast, reli
 
 The first provider-independent search slice is implemented:
 
-- `searchMode: "off" | "explicit" | "auto"` is accepted by the chat API; legacy `webSearch: true` maps to `explicit`.
+- `searchMode: "off" | "explicit" | "auto"` is accepted by the chat API and defaults to `auto`; the former `webSearch` boolean is no longer accepted.
 - Tavily runs behind provider-neutral search contracts and a `SearchGateway`, with a five-second deadline, cancellation propagation, bounded result count, normalized errors, URL canonicalization, and deduplication.
-- Explicit search now works independently of answer-model native tool support. The web search control is based on platform search configuration rather than OpenRouter model capabilities.
+- Explicit search works independently of answer-model native tool support. The web client has no search control and sends `auto` for every message.
 - Auto mode uses conservative English and Chinese freshness signals and gracefully continues without search if an automatic lookup fails.
 - Search snippets are inserted as isolated, explicitly untrusted evidence. The answer model is instructed to cite exact source links and state uncertainty when evidence is insufficient.
 - SSE now emits `run_started`, `search_started`, and `search_results`; `done` includes normalized sources while remaining compatible with existing delta consumers.
@@ -452,7 +452,7 @@ Before production lock-in, run an evaluation set of at least 100–200 represent
 
 ## 6. Search Modes and Runtime Strategy
 
-Replace the `webSearch: boolean` API concept with `searchMode: "off" | "explicit" | "auto"`. During migration, accept the old boolean and map `true` to `explicit` so older clients continue to work.
+Replace the `webSearch: boolean` API concept with `searchMode: "off" | "explicit" | "auto"`. The product decision is to make this a clean API break without a legacy boolean compatibility path.
 
 ### 6.1 Off
 
@@ -710,7 +710,7 @@ Exit criteria:
 - Configure Tavily with an explicit search depth, five-result default, no provider-generated answer, and no raw page content in the normal chat path.
 - Add provider-neutral search contracts, normalization, deduplication, timeouts, and limits.
 - Register `web_search` in the tool registry.
-- Add `searchMode` while retaining the old `webSearch` input compatibility mapping.
+- Add `searchMode` with `auto` as the default and remove the old `webSearch` input.
 - Implement explicit pre-search independent of answer-model capabilities.
 - Remove the UI restriction that ties search availability to native model tool support.
 - Keep a feature flag allowing fallback to the current OpenRouter-managed search during rollout.
@@ -843,7 +843,7 @@ Use fake provider adapters for deterministic tests. Keep a small opt-in live-pro
 - the Tavily adapter must pass the search contract suite using recorded or synthetic fixtures in normal CI;
 - live Tavily smoke tests must be opt-in and must not run in the default test command;
 - stream events must validate against shared schemas;
-- migration compatibility must verify old clients can still send `webSearch` during the transition.
+- omitted `searchMode` resolves to `auto`, while explicit `off` and `explicit` overrides remain covered.
 
 ## 15. Rollout and Feature Flags
 
