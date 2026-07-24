@@ -201,10 +201,12 @@ export function ChatPage() {
   const assistantRenderKeysRef = useRef<Record<string, string>>({});
   const scrollHideTimeouts = useRef<Record<string, number>>({});
   const [activeConversationId, setActiveConversationId] = useState<string>(routeConversationId);
+  const activeConversationIdRef = useRef(routeConversationId);
   const [draft, setDraft] = useState("");
   const [modelId, setModelId] = useState("");
   const [pendingUserMessage, setPendingUserMessage] = useState<MessageDto | null>(null);
   const [completedAssistantMessage, setCompletedAssistantMessage] = useState<MessageDto | null>(null);
+  const [streamingConversationId, setStreamingConversationId] = useState("");
   const [streamingText, setStreamingText] = useState("");
   const [toastMessage, setToastMessage] = useState("");
   const [toastKind, setToastKind] = useState<"error" | "success">("error");
@@ -235,6 +237,7 @@ export function ChatPage() {
   }, [modelId, models.data]);
 
   useEffect(() => {
+    activeConversationIdRef.current = routeConversationId;
     setActiveConversationId(routeConversationId);
   }, [routeConversationId]);
 
@@ -271,7 +274,7 @@ export function ChatPage() {
     }));
     const pending =
       pendingUserMessage &&
-      (!pendingUserMessage.conversationId || pendingUserMessage.conversationId === activeConversationId) &&
+      pendingUserMessage.conversationId === activeConversationId &&
       !base.some(
         (message) =>
           message.role === "user" &&
@@ -286,7 +289,7 @@ export function ChatPage() {
       !base.some((message) => message.id === completedAssistantMessage.id)
         ? [completedAssistantMessage]
         : [];
-    if (streamingText) {
+    if (streamingText && streamingConversationId === activeConversationId) {
       return [
         ...base,
         ...pending,
@@ -302,15 +305,20 @@ export function ChatPage() {
       ];
     }
     return [...base, ...pending, ...completed];
-  }, [activeConversationId, completedAssistantMessage, messages.data, modelId, pendingUserMessage, streamingText]);
+  }, [activeConversationId, completedAssistantMessage, messages.data, modelId, pendingUserMessage, streamingConversationId, streamingText]);
 
   const persistedMessages = messages.data?.messages ?? [];
   const conversationModelId = persistedMessages.find((message) => message.role === "assistant" && message.modelId)?.modelId ?? null;
   const hasPendingMessage =
     pendingUserMessage &&
-    (!pendingUserMessage.conversationId || pendingUserMessage.conversationId === activeConversationId);
+    pendingUserMessage.conversationId === activeConversationId;
+  const isActiveConversationSending = isSending && streamingConversationId === activeConversationId;
   const conversationIsLoading = Boolean(activeConversationId && messages.isLoading);
-  const modelSelectionLocked = conversationIsLoading || Boolean(hasPendingMessage) || Boolean(streamingText) || Boolean(conversationModelId);
+  const modelSelectionLocked =
+    conversationIsLoading ||
+    Boolean(hasPendingMessage) ||
+    Boolean(streamingText && streamingConversationId === activeConversationId) ||
+    Boolean(conversationModelId);
   const selectedModel = models.data?.models.find((model) => model.id === modelId) ?? models.data?.models[0];
   const modelGroups = useMemo(() => {
     const groups = new Map<string, LlmModelDto[]>();
@@ -395,6 +403,7 @@ export function ChatPage() {
     streamingAssistantKeyRef.current = `assistant-${optimisticMessage.id}`;
     setPendingUserMessage(optimisticMessage);
     setCompletedAssistantMessage(null);
+    setStreamingConversationId(activeConversationId);
     setStreamingText("");
     setToastMessage("");
     sendInFlightRef.current = true;
@@ -436,8 +445,10 @@ export function ChatPage() {
           if (event === "accepted") {
             serverAcceptedMessage = true;
             acceptedConversationId = data.message.conversationId;
+            setStreamingConversationId(data.message.conversationId);
             setPendingUserMessage({ ...data.message, renderKey: optimisticMessage.id });
-            if (!activeConversationId) {
+            if (!activeConversationId && !activeConversationIdRef.current) {
+              activeConversationIdRef.current = data.message.conversationId;
               setActiveConversationId(data.message.conversationId);
               navigate(`/c/${data.message.conversationId}`);
             }
@@ -457,7 +468,6 @@ export function ChatPage() {
             queryClient.invalidateQueries({ queryKey: ["me"] });
             queryClient.invalidateQueries({ queryKey: ["conversations"] });
             setPendingUserMessage((pending) => pending ? { ...pending, conversationId: data.message.conversationId } : pending);
-            if (!activeConversationId) setActiveConversationId(data.message.conversationId);
             queryClient.invalidateQueries({ queryKey: ["messages", data.message.conversationId] });
           }
         }
@@ -500,6 +510,7 @@ export function ChatPage() {
     setSidebarOpen(false);
     if (!activeConversationId) return;
 
+    activeConversationIdRef.current = "";
     setActiveConversationId("");
     setDraft("");
     setModelId(models.data?.models[0]?.id ?? "");
@@ -516,6 +527,7 @@ export function ChatPage() {
     mutationFn: (id: string) => api(`/api/conversations/${id}`, { method: "DELETE" }),
     onSuccess: (_, id) => {
       if (activeConversationId === id) {
+        activeConversationIdRef.current = "";
         setActiveConversationId("");
         navigate("/");
       }
@@ -605,6 +617,7 @@ export function ChatPage() {
                       return;
                     }
                     setRevealedDeleteConversationId(null);
+                    activeConversationIdRef.current = conversation.id;
                     setActiveConversationId(conversation.id);
                     setSidebarOpen(false);
                     navigate(`/c/${conversation.id}`);
@@ -832,7 +845,7 @@ export function ChatPage() {
                     </div>
                   </div>
                 ))}
-                {isSending && !streamingText && !completedAssistantMessage && (
+                {isActiveConversationSending && !streamingText && !completedAssistantMessage && (
                   <div className="nm-message is-assistant is-loading" aria-live="polite" aria-label={t.thinking}>
                     <div className="nm-bubble nm-typing">
                       <span />
@@ -869,12 +882,12 @@ export function ChatPage() {
                   }}
                 />
                 <Button
-                  className={`nm-send-button px-0 disabled:!cursor-default ${isSending ? "is-stop" : ""}`}
-                  onClick={isSending ? stopResponse : sendMessage}
-                  aria-label={isSending ? t.stopResponse : t.sendMessage}
-                  disabled={isSending ? false : !draft.trim() || !modelId || conversationIsLoading}
+                  className={`nm-send-button px-0 disabled:!cursor-default ${isActiveConversationSending ? "is-stop" : ""}`}
+                  onClick={isActiveConversationSending ? stopResponse : sendMessage}
+                  aria-label={isActiveConversationSending ? t.stopResponse : t.sendMessage}
+                  disabled={isActiveConversationSending ? false : isSending || !draft.trim() || !modelId || conversationIsLoading}
                 >
-                  {isSending ? <Square size={17} fill="currentColor" /> : <Send size={20} />}
+                  {isActiveConversationSending ? <Square size={17} fill="currentColor" /> : <Send size={20} />}
                 </Button>
               </div>
             </footer>
