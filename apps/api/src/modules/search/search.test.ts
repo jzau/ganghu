@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAssistantInstructions } from "../context/assistant-instructions.js";
 import { buildExternalSearchContext } from "../context/external-content.js";
+import { completeOpenRouterStructured } from "../llm/openrouter.js";
 import { TavilyProvider } from "./providers/tavily-provider.js";
 import { normalizeAndDeduplicateResults } from "./result-normalizer.js";
+import { toAutoSearchPlan } from "./search-planner.js";
 import { buildSearchRequests, filterResultsForPlan, planAutomaticSearch, resolveSearchMode, shouldSearchAutomatically } from "./search-service.js";
 
 test("normalizes URLs, removes tracking, and deduplicates sources", () => {
@@ -75,6 +77,44 @@ test("decomposes a broad Chinese news request into focused searches", () => {
   assert.equal(requests[0].topic, "news");
   assert.equal(requests[0].searchDepth, "basic");
   assert.equal(requests[0].includeRawContent, "markdown");
+});
+
+test("rule fallback recognizes a regional Chinese news digest", () => {
+  const plan = planAutomaticSearch({ message: "今日澳洲新闻" });
+
+  assert.equal(plan.category, "news");
+  assert.equal(plan.freshness, "day");
+  assert.deepEqual(plan.queries, [
+    "今日澳洲新闻",
+    "今日澳洲新闻 政治社会",
+    "今日澳洲新闻 财经科技",
+    "今日澳洲新闻 重大要闻"
+  ]);
+});
+
+test("maps a semantic planner decision into a bounded search plan", () => {
+  const plan = toAutoSearchPlan({
+    needsSearch: true,
+    intent: "news_digest",
+    timeRange: null,
+    topic: "news",
+    region: "Australia",
+    queries: ["今日澳洲重要新闻", "今日澳洲财经科技新闻", "今日澳洲重要新闻"],
+    responseStyle: "news_digest",
+    confidence: 0.97
+  });
+
+  assert.deepEqual(plan, {
+    needsSearch: true,
+    query: "今日澳洲重要新闻",
+    queries: ["今日澳洲重要新闻", "今日澳洲财经科技新闻"],
+    freshness: "day",
+    category: "news",
+    reason: "fresh_information",
+    responseStyle: "news_digest",
+    confidence: 0.97,
+    planner: "llm"
+  });
 });
 
 test("filters social posts from freshness-sensitive evidence and renumbers sources", () => {
@@ -210,6 +250,45 @@ test("Tavily adapter forwards news retrieval options and maps page evidence", as
     assert.equal(requestBody?.include_raw_content, "markdown");
     assert.equal(response.results[0].rawContent, "Cleaned article content");
     assert.equal(response.results[0].relevanceScore, 0.91);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("OpenRouter structured completion requires the planner JSON schema", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody: Record<string, any> | undefined;
+  globalThis.fetch = async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({
+      id: "generation-1",
+      choices: [{ message: { content: "{\"needsSearch\":false}" } }],
+      usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14, cost: 0.001 }
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const response = await completeOpenRouterStructured({
+      model: "deepseek/deepseek-v4-flash",
+      messages: [{ role: "user", content: "Plan this" }],
+      maxTokens: 300,
+      schemaName: "search_plan",
+      schema: {
+        type: "object",
+        properties: { needsSearch: { type: "boolean" } },
+        required: ["needsSearch"]
+      }
+    });
+
+    assert.equal(requestBody?.model, "deepseek/deepseek-v4-flash");
+    assert.equal(requestBody?.temperature, 0);
+    assert.equal(requestBody?.stream, false);
+    assert.equal(requestBody?.response_format.type, "json_schema");
+    assert.equal(requestBody?.response_format.json_schema.strict, true);
+    assert.equal(requestBody?.provider.require_parameters, true);
+    assert.equal(requestBody?.provider.sort.by, "latency");
+    assert.deepEqual(response.parsed, { needsSearch: false });
+    assert.equal(response.cost, "0.001");
   } finally {
     globalThis.fetch = originalFetch;
   }

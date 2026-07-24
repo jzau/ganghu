@@ -16,6 +16,10 @@ export interface StreamResult {
   cost?: string;
 }
 
+export interface StructuredCompletionResult extends StreamResult {
+  parsed: unknown;
+}
+
 type OpenRouterUsage = {
   prompt_tokens?: number;
   completion_tokens?: number;
@@ -139,6 +143,73 @@ export async function* streamOpenRouterChat(input: {
 
 export function estimateTokens(text: string) {
   return Math.max(1, Math.ceil(text.length / 4));
+}
+
+export async function completeOpenRouterStructured(input: {
+  model: string;
+  messages: LlmChatMessage[];
+  maxTokens: number;
+  schemaName: string;
+  schema: Record<string, unknown>;
+  signal?: AbortSignal;
+}): Promise<StructuredCompletionResult> {
+  const response = await fetch(`${env.OPENROUTER_BASE_URL}/chat/completions`, {
+    method: "POST",
+    signal: input.signal,
+    headers: {
+      Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": env.OPENROUTER_SITE_URL,
+      "X-Title": env.OPENROUTER_APP_NAME
+    },
+    body: JSON.stringify({
+      model: input.model,
+      messages: input.messages,
+      max_tokens: input.maxTokens,
+      temperature: 0,
+      stream: false,
+      usage: { include: true },
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: input.schemaName,
+          strict: true,
+          schema: input.schema
+        }
+      },
+      provider: {
+        require_parameters: true,
+        sort: { by: "latency", partition: "model" }
+      }
+    })
+  });
+  if (!response.ok) {
+    const providerMessage = await readOpenRouterError(response);
+    throw new OpenRouterError(`OpenRouter structured request failed with status ${response.status}`, response.status, providerMessage);
+  }
+
+  const payload = await response.json() as {
+    id?: string;
+    choices?: Array<{ message?: { content?: unknown } }>;
+    usage?: OpenRouterUsage;
+  };
+  const content = typeof payload.choices?.[0]?.message?.content === "string" ? payload.choices[0].message.content : "";
+  if (!content.trim()) throw new OpenRouterError("OpenRouter provider returned an empty structured response", 502);
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new OpenRouterError("OpenRouter provider returned invalid JSON", 502);
+  }
+
+  return {
+    content,
+    parsed,
+    usage: toUsage(payload.usage),
+    generationId: payload.id,
+    cost: payload.usage?.cost === undefined ? undefined : String(payload.usage.cost)
+  };
 }
 
 function encodeModelPath(model: string) {

@@ -9,7 +9,8 @@ import { buildExternalSearchContext } from "../context/external-content.js";
 import { estimateTokens, OpenRouterError, streamOpenRouterChat, type LlmChatMessage } from "../llm/openrouter.js";
 import type { SearchResult } from "../search/contracts.js";
 import { SearchError } from "../search/search-error.js";
-import { isPlatformSearchConfigured, planAutomaticSearch, resolveSearchMode, searchForMessage, searchForPlan } from "../search/search-service.js";
+import { planSearchAutomatically } from "../search/search-planner.js";
+import { isPlatformSearchConfigured, resolveSearchMode, searchForMessage, searchForPlan } from "../search/search-service.js";
 
 const createConversationSchema = z.object({ title: z.string().min(1).max(120).optional() });
 const chatSchema = z.object({
@@ -165,10 +166,27 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     let searchResults: SearchResult[] = [];
     let searchCompleted = false;
     try {
-      const autoSearchPlan = planAutomaticSearch({
+      const plannerExecution = await planSearchAutomatically({
         message: input.message,
-        recentMessages: conversationMessages
+        recentMessages: conversationMessages,
+        signal: streamAbortController.signal,
+        deadline: runDeadline
       });
+      const autoSearchPlan = plannerExecution.plan;
+      request.log.info({
+        run_id: runId,
+        planner_source: plannerExecution.source,
+        planner_model: plannerExecution.model,
+        planner_duration_ms: plannerExecution.durationMs,
+        planner_cost: plannerExecution.cost,
+        planner_prompt_tokens: plannerExecution.promptTokens,
+        planner_completion_tokens: plannerExecution.completionTokens,
+        planner_fallback_reason: plannerExecution.fallbackReason,
+        planner_needs_search: autoSearchPlan.needsSearch,
+        planner_category: autoSearchPlan.category,
+        planner_query_count: autoSearchPlan.queries?.length ?? 0,
+        planner_confidence: autoSearchPlan.confidence
+      }, "automatic search planned");
       const shouldSearch = isPlatformSearchConfigured() && (searchMode === "explicit" || (searchMode === "auto" && autoSearchPlan.needsSearch));
       if (shouldSearch) {
         const queryId = nanoid();
@@ -203,7 +221,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      const assistantInstructions = buildAssistantInstructions(autoSearchPlan.category);
+      const assistantInstructions = buildAssistantInstructions(autoSearchPlan.category, autoSearchPlan.responseStyle);
       const externalContext = searchCompleted ? buildExternalSearchContext(searchResults) : undefined;
       const systemContextTokens = estimateTokens(assistantInstructions) + (externalContext ? estimateTokens(externalContext) : 0);
       const contextBudget = model.contextWindowTokens - model.maxOutputTokens;

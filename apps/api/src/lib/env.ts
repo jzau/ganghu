@@ -26,6 +26,9 @@ const schema = z.object({
   OPENROUTER_APP_NAME: z.string().optional().default("GANGHU AI"),
   TAVILY_API_KEY: z.string().optional().default(""),
   TAVILY_BASE_URL: z.string().url().default("https://api.tavily.com"),
+  SEARCH_PLANNER_MODEL: z.string().min(1).default("deepseek/deepseek-v4-flash"),
+  SEARCH_PLANNER_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(8_000),
+  SEARCH_PLANNER_MAX_TOKENS: z.coerce.number().int().min(128).max(2_000).default(500),
   SEARCH_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
   SEARCH_MAX_RESULTS: z.coerce.number().int().min(1).max(8).default(5),
   AGENT_RUN_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(120_000).default(60_000)

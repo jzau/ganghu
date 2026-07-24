@@ -21,6 +21,9 @@ export interface AutoSearchPlan {
   queries?: string[];
   freshness?: SearchRequest["freshness"];
   category?: SearchCategory;
+  responseStyle?: "concise" | "news_digest" | "detailed";
+  confidence?: number;
+  planner?: "llm" | "rules";
   reason: "explicit_request" | "fresh_information" | "no_search_needed";
 }
 
@@ -30,7 +33,7 @@ export interface SearchConversationMessage {
 }
 
 const explicitSearchPattern = /^\s*(?:please\s+)?(?:search|google)\b|\b(?:can|could|would|will) you (?:search|look up|find|browse)\b|\b(?:look up|find online|browse the web)\b|搜索|查一下|查找|上网查/iu;
-const freshnessPattern = /\b(latest|current|currently|today|tonight|yesterday|tomorrow|recent|recently|breaking|live|as of|this (?:week|month|year))\b|最新|目前|当前|今天|今晚|昨日|昨天|明天|近期|最近|实时|截至/iu;
+const freshnessPattern = /\b(latest|current|currently|today|tonight|yesterday|tomorrow|recent|recently|breaking|live|as of|this (?:week|month|year))\b|最新|目前|当前|今天|今日|今晚|昨日|昨天|明天|近期|最近|实时|截至/iu;
 const currentRolePattern = /\bwho is (?:the )?(?:president|prime minister|ceo|chair(?:man|woman|person)?)\b|现任/iu;
 const weatherPattern = /\b(weather|forecast|temperature|rain(?:ing)?|snow(?:ing)?|sunny|cloudy|humidity)\b|天气|天气预报|气温|温度|下雨|下雪/iu;
 const weatherExplanationPattern = /\b(why|explain|what causes|weather science|weather meaning|weather definition|how (?:does|do) (?:the )?weather (?:work|form|change))\b|为什么|解释|原理|定义/iu;
@@ -39,7 +42,7 @@ const pricePattern = /\b(price|stock price|share price|market cap|exchange rate|
 const sportsPattern = /\b(score|standings|schedule|fixture|match result|game result)\b|比分|排名|赛程|赛果/iu;
 const versionPattern = /\b(latest|current) (?:release|version)|release date\b|最新版本|当前版本|发布日期/iu;
 const followUpPattern = /^\s*(?:what|how) about\b|^\s*(?:and|for)\b|^\s*(?:那|那么|还有|明天|今天|今晚)/iu;
-const broadNewsPattern = /^\s*(?:today'?s news|news today|latest news|news|今天的?新闻|今日新闻|最新新闻)\s*[?？!！]?\s*$/iu;
+const broadNewsPattern = /^\s*(?:(?:today'?s?|latest)\b.{0,40}\bnews|news\b.{0,40}\b(?:today|latest)|news|(?:今天|今日|最新).{0,20}(?:新闻|要闻))\s*[?？!！]?\s*$/iu;
 
 export function planAutomaticSearch(input: {
   message: string;
@@ -135,7 +138,7 @@ function detectCategory(message: string): SearchCategory {
 
 function selectFreshness(category: SearchCategory, message: string): SearchRequest["freshness"] {
   if (category === "weather" || category === "price" || category === "sports") return "day";
-  if (/\b(today|tonight|breaking|live)\b|今天|今晚|实时/iu.test(message)) return "day";
+  if (/\b(today|tonight|breaking|live)\b|今天|今日|今晚|实时/iu.test(message)) return "day";
   if (category === "news" || /\b(latest|recent|this week)\b|最新|近期|最近/iu.test(message)) return "week";
   if (freshnessPattern.test(message) || currentRolePattern.test(message) || versionPattern.test(message)) return "month";
   return undefined;
@@ -146,7 +149,13 @@ function buildSearchQueries(message: string, category: SearchCategory) {
   if (category !== "news" || !broadNewsPattern.test(message)) return [primaryQuery];
 
   if (/\p{Script=Han}/u.test(message)) {
+    if (!/^\s*(?:今天的?新闻|今日新闻|最新新闻)\s*[?？!！]?\s*$/u.test(message)) {
+      return [primaryQuery, `${message} 政治社会`, `${message} 财经科技`, `${message} 重大要闻`];
+    }
     return [primaryQuery, "今日中国重要新闻", "今日国际重大新闻", "今日财经科技新闻"];
+  }
+  if (!/^\s*(?:today'?s news|news today|latest news|news)\s*[?？!！]?\s*$/iu.test(message)) {
+    return [primaryQuery, `${message} politics and society`, `${message} business and technology`];
   }
   return [primaryQuery, "top world news today", "top business and technology news today"];
 }
