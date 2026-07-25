@@ -184,7 +184,12 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         planner_fallback_reason: plannerExecution.fallbackReason,
         planner_needs_search: autoSearchPlan.needsSearch,
         planner_category: autoSearchPlan.category,
+        planner_intent: autoSearchPlan.intent,
+        planner_topic: autoSearchPlan.topic,
+        planner_freshness: autoSearchPlan.freshness,
+        planner_entities: autoSearchPlan.entities,
         planner_query_count: autoSearchPlan.queries?.length ?? 0,
+        planner_queries: autoSearchPlan.queries,
         planner_confidence: autoSearchPlan.confidence
       }, "automatic search planned");
       const shouldSearch = isPlatformSearchConfigured() && (searchMode === "explicit" || (searchMode === "auto" && autoSearchPlan.needsSearch));
@@ -213,7 +218,15 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
             search_result_count: searchResults.length,
             search_duration_ms: search.durationMs,
             search_request_id: search.requestId,
-            search_cost: search.cost
+            search_cost: search.cost,
+            search_retry_used: search.retryUsed,
+            search_queries: search.queries,
+            search_evidence: searchResults.map((result) => ({
+              title: result.title.slice(0, 200),
+              host: safeHostname(result.url),
+              published_at: result.publishedAt,
+              relevance_score: result.relevanceScore
+            }))
           }, "web search completed");
         } catch (error) {
           if (searchMode === "explicit" || streamAbortController.signal.aborted) throw error;
@@ -419,6 +432,14 @@ async function findOrCreateDraftConversation(userId: string, message: string) {
 function writeEvent(reply: { raw: NodeJS.WritableStream }, event: string, data: unknown) {
   reply.raw.write(`event: ${event}\n`);
   reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+function safeHostname(value: string) {
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return "invalid-url";
+  }
 }
 
 function trimMessages(messages: LlmChatMessage[], maxTokens: number) {

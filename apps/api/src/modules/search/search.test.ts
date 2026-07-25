@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { env } from "../../lib/env.js";
 import { buildAssistantInstructions } from "../context/assistant-instructions.js";
 import { buildExternalSearchContext } from "../context/external-content.js";
 import { completeOpenRouterStructured } from "../llm/openrouter.js";
 import { TavilyProvider } from "./providers/tavily-provider.js";
 import { normalizeAndDeduplicateResults } from "./result-normalizer.js";
-import { toAutoSearchPlan } from "./search-planner.js";
-import { buildSearchRequests, filterResultsForPlan, planAutomaticSearch, resolveSearchMode, shouldSearchAutomatically } from "./search-service.js";
+import { planSearchAutomatically, toAutoSearchPlan } from "./search-planner.js";
+import { buildSearchRequests, filterResultsForPlan, planAutomaticSearch, resolveSearchMode, shouldRetrySearch, shouldSearchAutomatically } from "./search-service.js";
 
 test("normalizes URLs, removes tracking, and deduplicates sources", () => {
   const results = normalizeAndDeduplicateResults([
@@ -92,6 +93,106 @@ test("rule fallback recognizes a regional Chinese news digest", () => {
   ]);
 });
 
+test("treats an ambiguous named-entity incident question as current news", () => {
+  const plan = planAutomaticSearch({ message: "携程怎么了" });
+
+  assert.equal(plan.needsSearch, true);
+  assert.equal(plan.category, "news");
+  assert.equal(plan.intent, "news_lookup");
+  assert.equal(plan.topic, "news");
+  assert.equal(plan.freshness, "week");
+  assert.equal(plan.queries?.length, 3);
+  assert.match(plan.query ?? "", /携程/);
+});
+
+test("distinguishes entity news from a broad regional news digest", () => {
+  const entityPlan = planAutomaticSearch({ message: "今天携程新闻" });
+  assert.equal(entityPlan.intent, "news_lookup");
+  assert.equal(entityPlan.responseStyle, undefined);
+  assert.equal(entityPlan.freshness, "day");
+  assert.equal(entityPlan.queries?.length, 3);
+  assert.match(entityPlan.query ?? "", /携程/);
+
+  const regionalPlan = planAutomaticSearch({ message: "今日澳洲新闻" });
+  assert.equal(regionalPlan.intent, "news_digest");
+  assert.equal(regionalPlan.responseStyle, "news_digest");
+  assert.equal(regionalPlan.queries?.length, 4);
+});
+
+test("uses the deterministic fast path for obvious current-event questions", async () => {
+  const result = await planSearchAutomatically({
+    message: "携程怎么了",
+    signal: new AbortController().signal,
+    deadline: Date.now() + 1_000
+  });
+
+  assert.equal(result.source, "rules");
+  assert.equal(result.fallbackReason, "deterministic_current_intent");
+  assert.equal(result.plan.needsSearch, true);
+  assert.equal(result.plan.category, "news");
+});
+
+test("plans grounded research for comparisons of named projects", async () => {
+  const plan = planAutomaticSearch({ message: "openworker和openclaw 有什么区别" });
+
+  assert.equal(plan.needsSearch, true);
+  assert.equal(plan.category, "research");
+  assert.equal(plan.intent, "web_research");
+  assert.equal(plan.freshness, "year");
+  assert.deepEqual(plan.entities, ["openworker", "openclaw"]);
+  assert.deepEqual(plan.queries, [
+    "\"openworker\" \"openclaw\" comparison",
+    "\"openworker\" official GitHub README documentation",
+    "\"openclaw\" official GitHub README documentation"
+  ]);
+
+  const requests = buildSearchRequests(plan);
+  assert.equal(requests.length, 3);
+  assert.equal(requests[0].topic, "general");
+  assert.equal(requests[0].searchDepth, "advanced");
+  assert.equal(requests[0].chunksPerSource, 3);
+  assert.equal(requests[0].includeRawContent, "markdown");
+  assert.equal(requests[1].exactMatch, true);
+  assert.deepEqual(requests[1].includeDomains, ["github.com"]);
+
+  const execution = await planSearchAutomatically({
+    message: "openworker和openclaw 有什么区别",
+    signal: new AbortController().signal,
+    deadline: Date.now() + 1_000
+  });
+  assert.equal(execution.source, "rules");
+  assert.equal(execution.fallbackReason, "deterministic_current_intent");
+  assert.equal(execution.plan.category, "research");
+});
+
+test("recognizes concise Chinese comparison wording with spaces", async () => {
+  const message = "openworker 和 openclaw 的区别";
+  const plan = planAutomaticSearch({ message });
+
+  assert.equal(plan.needsSearch, true);
+  assert.equal(plan.category, "research");
+  assert.deepEqual(plan.entities, ["openworker", "openclaw"]);
+
+  const execution = await planSearchAutomatically({
+    message,
+    signal: new AbortController().signal,
+    deadline: Date.now() + 1_000
+  });
+  assert.equal(execution.source, "rules");
+  assert.equal(execution.fallbackReason, "deterministic_current_intent");
+  assert.equal(execution.plan.needsSearch, true);
+  assert.equal(execution.plan.queries?.length, 3);
+});
+
+test("recognizes a lookup for an unfamiliar named project", () => {
+  const plan = planAutomaticSearch({ message: "OpenWorker是什么？" });
+
+  assert.equal(plan.category, "research");
+  assert.equal(plan.intent, "web_research");
+  assert.deepEqual(plan.entities, ["OpenWorker"]);
+  assert.equal(plan.queries?.length, 3);
+});
+
 test("maps a semantic planner decision into a bounded search plan", () => {
   const plan = toAutoSearchPlan({
     needsSearch: true,
@@ -110,11 +211,35 @@ test("maps a semantic planner decision into a bounded search plan", () => {
     queries: ["今日澳洲重要新闻", "今日澳洲财经科技新闻"],
     freshness: "day",
     category: "news",
+    intent: "news_digest",
+    topic: "news",
+    region: "Australia",
     reason: "fresh_information",
     responseStyle: "news_digest",
     confidence: 0.97,
     planner: "llm"
   });
+});
+
+test("forces explicit news wording onto the news retrieval path", () => {
+  const plan = toAutoSearchPlan({
+    needsSearch: true,
+    intent: "current_fact",
+    timeRange: "day",
+    topic: "general",
+    region: null,
+    queries: ["今天携程新闻", "携程 最新消息"],
+    responseStyle: "concise",
+    confidence: 1
+  }, "今天携程新闻");
+
+  assert.equal(plan.category, "news");
+  assert.equal(plan.intent, "news_lookup");
+  assert.equal(plan.topic, "news");
+  const requests = buildSearchRequests(plan);
+  assert.equal(requests[0].topic, "news");
+  assert.equal(requests[0].searchDepth, "advanced");
+  assert.equal(requests[0].chunksPerSource, 3);
 });
 
 test("filters social posts from freshness-sensitive evidence and renumbers sources", () => {
@@ -153,6 +278,43 @@ test("rejects reference pages and prioritizes current established news sources",
   assert.equal(filtered.some((result) => result.title === "Definition"), false);
 });
 
+test("hard-rejects a dated stale article from a current news lookup", () => {
+  const plan = {
+    needsSearch: true,
+    query: "携程 最新消息",
+    queries: ["携程 最新消息"],
+    freshness: "day" as const,
+    category: "news" as const,
+    intent: "news_lookup" as const,
+    topic: "news" as const,
+    reason: "fresh_information" as const
+  };
+  const filtered = filterResultsForPlan([
+    {
+      sourceId: "S1",
+      title: "新闻盲盒：2026年02月25日",
+      url: "https://example.com/old-ctrip-story",
+      snippet: "携程历史新闻",
+      relevanceScore: 0.95,
+      provider: "fake",
+      rank: 1
+    },
+    {
+      sourceId: "S2",
+      title: "携程最新公告",
+      url: "https://example.com/current-ctrip-story",
+      snippet: "携程发布最新回应",
+      publishedAt: new Date().toISOString(),
+      relevanceScore: 0.8,
+      provider: "fake",
+      rank: 2
+    }
+  ], plan);
+
+  assert.deepEqual(filtered.map((result) => result.title), ["携程最新公告"]);
+  assert.equal(shouldRetrySearch(filtered, plan), true);
+});
+
 test("defaults omitted search mode to auto and preserves explicit overrides", () => {
   assert.equal(resolveSearchMode({}), "auto");
   assert.equal(resolveSearchMode({ searchMode: "off" }), "off");
@@ -181,6 +343,12 @@ test("uses a digest response profile for broad news", () => {
   assert.match(instructions, /produce a useful digest/);
   assert.match(instructions, /Do not treat dictionaries, encyclopedias/);
   assert.doesNotMatch(instructions, /one to three concise sentences/);
+});
+
+test("uses an evidence-first response profile for project comparisons", () => {
+  const instructions = buildAssistantInstructions("research", "detailed");
+  assert.match(instructions, /official website, repository, or documentation/);
+  assert.match(instructions, /instead of guessing from a name/);
 });
 
 test("Tavily adapter sends bounded search options and maps its response", async () => {
@@ -241,15 +409,45 @@ test("Tavily adapter forwards news retrieval options and maps page evidence", as
       maxResults: 5,
       freshness: "day",
       topic: "news",
-      searchDepth: "basic",
+      searchDepth: "advanced",
+      chunksPerSource: 3,
       includeRawContent: "markdown"
     }, new AbortController().signal);
     assert.equal(requestBody?.time_range, "day");
     assert.equal(requestBody?.topic, "news");
-    assert.equal(requestBody?.search_depth, "basic");
+    assert.equal(requestBody?.search_depth, "advanced");
+    assert.equal(requestBody?.chunks_per_source, 3);
     assert.equal(requestBody?.include_raw_content, "markdown");
     assert.equal(response.results[0].rawContent, "Cleaned article content");
     assert.equal(response.results[0].relevanceScore, 0.91);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Tavily adapter forwards exact-name and domain filters", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody: Record<string, unknown> | undefined;
+  globalThis.fetch = async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ results: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  };
+
+  try {
+    await new TavilyProvider("test-key", "https://api.tavily.com").search({
+      query: "\"OpenWorker\" official repository",
+      maxResults: 5,
+      topic: "general",
+      searchDepth: "basic",
+      exactMatch: true,
+      includeDomains: ["github.com"]
+    }, new AbortController().signal);
+
+    assert.equal(requestBody?.exact_match, true);
+    assert.deepEqual(requestBody?.include_domains, ["github.com"]);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -291,5 +489,103 @@ test("OpenRouter structured completion requires the planner JSON schema", async 
     assert.equal(response.cost, "0.001");
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("retries the search planner fallback model after a primary HTTP 429", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalApiKey = env.OPENROUTER_API_KEY;
+  const originalPrimaryModel = env.SEARCH_PLANNER_MODEL;
+  const originalFallbackModel = env.SEARCH_PLANNER_FALLBACK_MODEL;
+  const requestedModels: string[] = [];
+  env.OPENROUTER_API_KEY = "test-key";
+  env.SEARCH_PLANNER_MODEL = "deepseek/deepseek-v4-flash";
+  env.SEARCH_PLANNER_FALLBACK_MODEL = "openai/gpt-5.6-luna";
+
+  globalThis.fetch = async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as { model: string };
+    requestedModels.push(body.model);
+    if (requestedModels.length === 1) {
+      return new Response(JSON.stringify({ error: { message: "Rate limit exceeded" } }), {
+        status: 429,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    return new Response(JSON.stringify({
+      id: "fallback-generation",
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            needsSearch: false,
+            intent: "general_knowledge",
+            timeRange: null,
+            topic: null,
+            region: null,
+            queries: [],
+            responseStyle: "concise",
+            confidence: 0.99
+          })
+        }
+      }],
+      usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20, cost: 0.002 }
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const execution = await planSearchAutomatically({
+      message: "Explain photosynthesis",
+      signal: new AbortController().signal,
+      deadline: Date.now() + 2_000
+    });
+
+    assert.deepEqual(requestedModels, [
+      "deepseek/deepseek-v4-flash",
+      "openai/gpt-5.6-luna"
+    ]);
+    assert.equal(execution.source, "llm");
+    assert.equal(execution.model, "openai/gpt-5.6-luna");
+    assert.equal(execution.fallbackReason, "primary_model_rate_limited");
+    assert.equal(execution.plan.needsSearch, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    env.OPENROUTER_API_KEY = originalApiKey;
+    env.SEARCH_PLANNER_MODEL = originalPrimaryModel;
+    env.SEARCH_PLANNER_FALLBACK_MODEL = originalFallbackModel;
+  }
+});
+
+test("does not use the search planner fallback model for non-429 errors", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalApiKey = env.OPENROUTER_API_KEY;
+  const originalPrimaryModel = env.SEARCH_PLANNER_MODEL;
+  const originalFallbackModel = env.SEARCH_PLANNER_FALLBACK_MODEL;
+  let requestCount = 0;
+  env.OPENROUTER_API_KEY = "test-key";
+  env.SEARCH_PLANNER_MODEL = "deepseek/deepseek-v4-flash";
+  env.SEARCH_PLANNER_FALLBACK_MODEL = "openai/gpt-5.6-luna";
+
+  globalThis.fetch = async () => {
+    requestCount += 1;
+    return new Response(JSON.stringify({ error: { message: "Provider unavailable" } }), {
+      status: 503,
+      headers: { "Content-Type": "application/json" }
+    });
+  };
+
+  try {
+    const execution = await planSearchAutomatically({
+      message: "Explain photosynthesis",
+      signal: new AbortController().signal,
+      deadline: Date.now() + 2_000
+    });
+
+    assert.equal(requestCount, 1);
+    assert.equal(execution.source, "rules");
+    assert.match(execution.fallbackReason ?? "", /status 503/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    env.OPENROUTER_API_KEY = originalApiKey;
+    env.SEARCH_PLANNER_MODEL = originalPrimaryModel;
+    env.SEARCH_PLANNER_FALLBACK_MODEL = originalFallbackModel;
   }
 });

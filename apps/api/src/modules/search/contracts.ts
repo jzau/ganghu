@@ -9,6 +9,8 @@ export interface SearchRequest {
   searchDepth?: "advanced" | "basic" | "fast" | "ultra-fast";
   includeRawContent?: boolean | "markdown" | "text";
   chunksPerSource?: 1 | 2 | 3;
+  exactMatch?: boolean;
+  includeDomains?: string[];
 }
 
 export interface SearchResult {
@@ -43,4 +45,6 @@ export interface SearchExecution extends SearchProviderResponse {
   provider: string;
   durationMs: number;
   fallbackUsed: boolean;
+  retryUsed?: boolean;
+  queries?: string[];
 }

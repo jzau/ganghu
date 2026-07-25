@@ -6,6 +6,11 @@ export function buildAssistantInstructions(category?: SearchCategory, responseSt
 most important verified stories into clear sections, summarize each story concisely, and distinguish
 international, regional, business, technology, or other relevant coverage when the evidence supports it.
 Do not treat dictionaries, encyclopedias, old background pages, or unrelated pages as current news.`
+    : category === "research"
+      ? `For comparisons of products, projects, libraries, models, or services, ground each side in its
+official website, repository, or documentation whenever available. Start with the clearest practical
+difference, then compare only dimensions supported by the evidence. Clearly label uncertainty or missing
+information instead of guessing from a name. Account for differences in project age and maturity.`
     : responseStyle === "detailed"
       ? `Provide a structured, sufficiently detailed answer while avoiding repetition and irrelevant background.`
       : `For simple questions, prefer one to three concise sentences unless the user asks for detail.`;

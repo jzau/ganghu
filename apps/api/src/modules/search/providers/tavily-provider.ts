@@ -44,6 +44,8 @@ export class TavilyProvider implements SearchProvider {
           include_images: false,
           include_usage: true,
           ...(request.chunksPerSource ? { chunks_per_source: request.chunksPerSource } : {}),
+          ...(request.exactMatch ? { exact_match: true } : {}),
+          ...(request.includeDomains?.length ? { include_domains: request.includeDomains } : {}),
           ...(request.freshness ? { time_range: request.freshness } : {})
         })
       });
