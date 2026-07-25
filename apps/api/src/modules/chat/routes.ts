@@ -112,8 +112,8 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     if (model.provider !== "openrouter") {
       return reply.code(400).send({ message: "Only OpenRouter models are supported" });
     }
-    if (searchMode === "explicit" && !isPlatformSearchConfigured()) {
-      return reply.code(503).send({ message: "Web search is not configured. Add TAVILY_API_KEY on the server." });
+    if (searchMode === "explicit" && !(await isPlatformSearchConfigured())) {
+      return reply.code(503).send({ message: "The active web search provider is not configured correctly." });
     }
     if (user.appTokenBalance < model.minimumRequiredBalance) {
       return reply.code(402).send({ message: "Not enough app tokens" });
@@ -192,7 +192,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         planner_queries: autoSearchPlan.queries,
         planner_confidence: autoSearchPlan.confidence
       }, "automatic search planned");
-      const shouldSearch = isPlatformSearchConfigured() && (searchMode === "explicit" || (searchMode === "auto" && autoSearchPlan.needsSearch));
+      const shouldSearch = (await isPlatformSearchConfigured()) && (searchMode === "explicit" || (searchMode === "auto" && autoSearchPlan.needsSearch));
       if (shouldSearch) {
         const queryId = nanoid();
         const searchQuery = searchMode === "auto" ? autoSearchPlan.query! : input.message;

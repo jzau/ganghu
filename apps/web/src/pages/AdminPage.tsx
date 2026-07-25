@@ -1,12 +1,17 @@
 import type { ApiUser, LlmModelDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, ChevronDown, Copy, Database, LogOut, Menu, Pencil, Plus, Save, Ticket, Users } from "lucide-react";
+import { Bot, Check, ChevronDown, Copy, Database, LogOut, Menu, Pencil, Plus, Save, Search, Ticket, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { api } from "../lib/api";
 
-type AdminSection = "users" | "redeem-codes" | "models";
+type AdminSection = "users" | "redeem-codes" | "models" | "settings";
+type SearchProvider = "tavily" | "aliyun-iqs";
+type SearchSettings = {
+  provider: SearchProvider;
+  configured: Record<SearchProvider, boolean>;
+};
 
 type AdminRedeemCode = {
   id: string;
@@ -47,6 +52,11 @@ export function AdminPage() {
   const models = useQuery({ queryKey: ["admin-models"], queryFn: () => api<{ models: LlmModelDto[] }>("/api/admin/models"), enabled: authed });
   const users = useQuery({ queryKey: ["admin-users"], queryFn: () => api<{ users: ApiUser[] }>("/api/admin/users"), enabled: authed });
   const codes = useQuery({ queryKey: ["admin-codes"], queryFn: () => api<{ codes: AdminRedeemCode[] }>("/api/admin/redeem-codes"), enabled: authed });
+  const searchSettings = useQuery({
+    queryKey: ["admin-search-settings"],
+    queryFn: () => api<SearchSettings>("/api/admin/settings/search"),
+    enabled: authed
+  });
 
   useEffect(() => {
     let active = true;
@@ -73,6 +83,7 @@ export function AdminPage() {
     queryClient.removeQueries({ queryKey: ["admin-models"] });
     queryClient.removeQueries({ queryKey: ["admin-users"] });
     queryClient.removeQueries({ queryKey: ["admin-codes"] });
+    queryClient.removeQueries({ queryKey: ["admin-search-settings"] });
     setAuthState("guest");
   }
 
@@ -81,7 +92,11 @@ export function AdminPage() {
     setSidebarOpen(false);
   }
 
-  const sectionTitle = section === "users" ? "Users" : section === "redeem-codes" ? "Redeem Codes" : "Models";
+  const sectionTitle = section === "users"
+    ? "Users"
+    : section === "redeem-codes"
+      ? "Redeem Codes"
+      : section === "models" ? "Models" : "Settings";
 
   if (authState === "checking") {
     return (
@@ -132,6 +147,7 @@ export function AdminPage() {
               <SidebarButton active={section === "users"} count={users.data?.users.length ?? 0} icon={<Users size={17} />} label="Users" onClick={() => selectSection("users")} />
               <SidebarButton active={section === "redeem-codes"} count={codes.data?.codes.length ?? 0} icon={<Ticket size={17} />} label="Redeem Codes" onClick={() => selectSection("redeem-codes")} />
               <SidebarButton active={section === "models"} count={models.data?.models.length ?? 0} icon={<Bot size={17} />} label="Models" onClick={() => selectSection("models")} />
+              <SidebarButton active={section === "settings"} icon={<Search size={17} />} label="Search Settings" onClick={() => selectSection("settings")} />
             </nav>
 
             <Button className="mt-auto w-full justify-start" variant="secondary" onClick={() => void logout()}>
@@ -153,6 +169,7 @@ export function AdminPage() {
               {section === "users" && <UsersTable users={users.data?.users ?? []} />}
               {section === "redeem-codes" && <RedeemCodesTable codes={codes.data?.codes ?? []} />}
               {section === "models" && <ModelsTable models={models.data?.models ?? []} />}
+              {section === "settings" && <SearchSettingsPanel settings={searchSettings.data} />}
             </div>
           </section>
         </div>
@@ -161,7 +178,7 @@ export function AdminPage() {
   );
 }
 
-function SidebarButton({ active, count, icon, label, onClick }: { active: boolean; count: number; icon: React.ReactNode; label: string; onClick: () => void }) {
+function SidebarButton({ active, count, icon, label, onClick }: { active: boolean; count?: number; icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
     <button
       className={`focus-ring flex h-12 w-full items-center justify-between rounded-xl border-0 bg-[#ececec] px-3 text-left transition ${active ? "shadow-nm-in" : "shadow-nm-out hover:brightness-[1.02]"}`}
@@ -171,7 +188,7 @@ function SidebarButton({ active, count, icon, label, onClick }: { active: boolea
         {icon}
         <span className="truncate text-sm font-extrabold">{label}</span>
       </span>
-      <span className="rounded bg-[#1a1a1a] px-2 py-1 text-xs font-extrabold text-[#ececec]">{count}</span>
+      {count !== undefined && <span className="rounded bg-[#1a1a1a] px-2 py-1 text-xs font-extrabold text-[#ececec]">{count}</span>}
     </button>
   );
 }
@@ -415,6 +432,111 @@ function RedeemCodeModal({ onClose }: { onClose: () => void }) {
         )}
       </div>
     </Modal>
+  );
+}
+
+function SearchSettingsPanel({ settings }: { settings?: SearchSettings }) {
+  const queryClient = useQueryClient();
+  const [selectedProvider, setSelectedProvider] = useState<SearchProvider>("tavily");
+  const saveSettings = useMutation({
+    mutationFn: (provider: SearchProvider) => api<SearchSettings>("/api/admin/settings/search", {
+      method: "PATCH",
+      body: JSON.stringify({ provider })
+    }),
+    onSuccess: (nextSettings) => {
+      queryClient.setQueryData(["admin-search-settings"], nextSettings);
+    }
+  });
+
+  useEffect(() => {
+    if (settings) setSelectedProvider(settings.provider);
+  }, [settings]);
+
+  const providers: Array<{ id: SearchProvider; name: string; description: string }> = [
+    {
+      id: "tavily",
+      name: "Tavily",
+      description: "General international web search with broad English-language coverage."
+    },
+    {
+      id: "aliyun-iqs",
+      name: "Alibaba Cloud IQS",
+      description: "UnifiedSearch optimized for agent search, semantic retrieval, and multilingual results."
+    }
+  ];
+
+  return (
+    <div>
+      <PageHeader
+        subtitle="Choose the provider used by new web searches. Changes apply immediately without restarting the API."
+        title="Search Settings"
+      />
+      {!settings ? (
+        <section className="nm-card p-5 text-sm font-bold text-[#808080]">Loading search settings...</section>
+      ) : (
+        <div className="max-w-3xl space-y-4">
+          <section className="nm-card space-y-3 p-4 sm:p-5">
+            <div>
+              <h3 className="text-base font-extrabold">Primary search engine</h3>
+              <p className="text-sm font-semibold text-[#808080]">
+                An in-progress search keeps its original provider. The next search uses the newly saved provider.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {providers.map((provider) => {
+                const configured = settings.configured[provider.id];
+                const selected = selectedProvider === provider.id;
+                return (
+                  <button
+                    key={provider.id}
+                    type="button"
+                    className={`focus-ring rounded-xl border-0 bg-[#ececec] p-4 text-left transition ${
+                      selected ? "shadow-nm-in" : "shadow-nm-out hover:brightness-[1.02]"
+                    } ${configured ? "" : "cursor-not-allowed opacity-55"}`}
+                    disabled={!configured}
+                    aria-pressed={selected}
+                    onClick={() => setSelectedProvider(provider.id)}
+                  >
+                    <span className="mb-2 flex items-center justify-between gap-3">
+                      <span className="font-extrabold">{provider.name}</span>
+                      <span className={`rounded px-2 py-1 text-[11px] font-extrabold ${
+                        configured ? "bg-[#1a1a1a] text-[#ececec]" : "bg-[#d3d3d3] text-[#666]"
+                      }`}>
+                        {configured ? "Configured" : "API key missing"}
+                      </span>
+                    </span>
+                    <span className="block text-sm font-semibold leading-relaxed text-[#808080]">{provider.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Button
+                disabled={selectedProvider === settings.provider || saveSettings.isPending || !settings.configured[selectedProvider]}
+                onClick={() => saveSettings.mutate(selectedProvider)}
+              >
+                <Save size={16} />
+                {saveSettings.isPending ? "Saving..." : "Save search engine"}
+              </Button>
+              <span className="text-sm font-semibold text-[#808080]">
+                Active: {providers.find((provider) => provider.id === settings.provider)?.name}
+              </span>
+            </div>
+            {saveSettings.isSuccess && selectedProvider === settings.provider && (
+              <p className="flex items-center gap-2 text-sm font-bold">
+                <Check size={16} /> Search engine updated.
+              </p>
+            )}
+            {saveSettings.error && (
+              <p className="text-sm font-bold text-red-700">{saveSettings.error.message}</p>
+            )}
+          </section>
+          <section className="rounded-xl bg-[#ececec] p-4 text-sm font-semibold leading-relaxed text-[#808080] shadow-nm-in">
+            Provider credentials remain in the server environment and are never returned to the browser. Configure both API keys to make both choices available.
+          </section>
+        </div>
+      )}
+    </div>
   );
 }
 

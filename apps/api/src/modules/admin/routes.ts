@@ -6,6 +6,12 @@ import { env } from "../../lib/env.js";
 import { toModelDto, toUserDto } from "../../lib/mapper.js";
 import { prisma } from "../../lib/prisma.js";
 import { getOpenRouterModelEndpointCount, OpenRouterError } from "../llm/openrouter.js";
+import {
+  getActiveSearchProviderId,
+  getSearchProviderAvailability,
+  searchProviderIds,
+  setActiveSearchProviderId
+} from "../search/search-settings.js";
 
 const logoUrlSchema = z.preprocess(
   (value) => {
@@ -62,6 +68,7 @@ const redeemCodeSchema = z.object({
   expiresAt: z.string().datetime().nullable().optional()
 });
 const adjustmentSchema = z.object({ amount: z.number().int(), note: z.string().max(500).optional() });
+const searchSettingsSchema = z.object({ provider: z.enum(searchProviderIds) });
 const alphabet = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 16);
 
 export const adminRoutes: FastifyPluginAsync = async (app) => {
@@ -89,6 +96,17 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.get("/models", { preHandler: app.authenticateAdmin }, async () => {
     const models = await prisma.llmModel.findMany({ orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }] });
     return { models: models.map((model) => toModelDto(model)) };
+  });
+
+  app.get("/settings/search", { preHandler: app.authenticateAdmin }, async () => ({
+    provider: await getActiveSearchProviderId(),
+    configured: getSearchProviderAvailability()
+  }));
+
+  app.patch("/settings/search", { preHandler: app.authenticateAdmin }, async (request) => {
+    const input = searchSettingsSchema.parse(request.body);
+    const provider = await setActiveSearchProviderId(input.provider);
+    return { provider, configured: getSearchProviderAvailability() };
   });
 
   app.post("/models", { preHandler: app.authenticateAdmin }, async (request) => {

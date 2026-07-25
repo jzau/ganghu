@@ -1,12 +1,22 @@
 import { env } from "../../lib/env.js";
 import type { SearchExecution, SearchMode, SearchRequest, SearchResult } from "./contracts.js";
+import { AliyunIqsProvider } from "./providers/aliyun-iqs-provider.js";
 import { TavilyProvider } from "./providers/tavily-provider.js";
 import { SearchGateway } from "./search-gateway.js";
+import { getActiveSearchProviderId, getSearchProviderAvailability } from "./search-settings.js";
 
-const gateway = new SearchGateway(new TavilyProvider(env.TAVILY_API_KEY, env.TAVILY_BASE_URL), env.SEARCH_TIMEOUT_MS);
+const providers = {
+  tavily: new TavilyProvider(env.TAVILY_API_KEY, env.TAVILY_BASE_URL),
+  "aliyun-iqs": new AliyunIqsProvider(env.ALIYUN_IQS_API_KEY, env.ALIYUN_IQS_BASE_URL, env.ALIYUN_IQS_ENGINE_TYPE)
+};
+const gateways = {
+  tavily: new SearchGateway(providers.tavily, env.SEARCH_TIMEOUT_MS),
+  "aliyun-iqs": new SearchGateway(providers["aliyun-iqs"], env.SEARCH_TIMEOUT_MS)
+};
 
-export function isPlatformSearchConfigured() {
-  return Boolean(env.TAVILY_API_KEY);
+export async function isPlatformSearchConfigured() {
+  const provider = await getActiveSearchProviderId();
+  return getSearchProviderAvailability()[provider];
 }
 
 export function resolveSearchMode(input: { searchMode?: SearchMode }): SearchMode {
@@ -131,9 +141,11 @@ export async function searchForPlan(input: {
     throw new Error("A searchable auto-search plan is required");
   }
 
+  const providerId = await getActiveSearchProviderId();
+  const gateway = gateways[providerId];
   const startedAt = Date.now();
   const initialRequests = buildSearchRequests(input.plan, input.maxResults);
-  const attempts = await executeSearchRequests(initialRequests, input);
+  const attempts = await executeSearchRequests(initialRequests, input, gateway);
   const executions = attempts.flatMap((attempt) => attempt.status === "fulfilled" ? [attempt.value] : []);
   if (!executions.length) {
     const failure = attempts.find((attempt) => attempt.status === "rejected");
@@ -155,7 +167,7 @@ export async function searchForPlan(input: {
   ) {
     const recoveryRequests = buildRecoverySearchRequests(input.plan, input.maxResults);
     if (recoveryRequests.length) {
-      const recoveryAttempts = await executeSearchRequests(recoveryRequests, input);
+      const recoveryAttempts = await executeSearchRequests(recoveryRequests, input, gateway);
       const recoveryExecutions = recoveryAttempts.flatMap((attempt) => attempt.status === "fulfilled" ? [attempt.value] : []);
       if (recoveryExecutions.length) {
         retryUsed = true;
@@ -174,7 +186,7 @@ export async function searchForPlan(input: {
     const missingEntities = findMissingResearchEntities(filteredResults, input.plan.entities ?? []);
     const recoveryRequests = buildResearchRecoveryRequests(missingEntities, input.plan, input.maxResults);
     if (recoveryRequests.length) {
-      const recoveryAttempts = await executeSearchRequests(recoveryRequests, input);
+      const recoveryAttempts = await executeSearchRequests(recoveryRequests, input, gateway);
       const recoveryExecutions = recoveryAttempts.flatMap((attempt) => attempt.status === "fulfilled" ? [attempt.value] : []);
       if (recoveryExecutions.length) {
         retryUsed = true;
@@ -200,7 +212,8 @@ export async function searchForPlan(input: {
 
 function executeSearchRequests(
   requests: SearchRequest[],
-  input: { signal: AbortSignal; deadline: number }
+  input: { signal: AbortSignal; deadline: number },
+  gateway: SearchGateway
 ) {
   return Promise.allSettled(
     requests.map((request) => gateway.search(request, { signal: input.signal, deadline: input.deadline }))

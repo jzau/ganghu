@@ -30,7 +30,15 @@ V1 modular monolith for GANGHU AI, also named 工夫, with phone OTP login, app-
    npm run dev
    ```
 
-The mock OTP code is `000000`. If `OPENROUTER_API_KEY` is empty, chat returns a local fallback response while still exercising persistence and billing. Set `TAVILY_API_KEY` to enable provider-independent web search for every configured answer model. Search defaults to `auto`; the chat API also accepts `searchMode: "off" | "explicit" | "auto"` when a caller needs an override. Automatic search planning uses `SEARCH_PLANNER_MODEL` (default: `deepseek/deepseek-v4-flash`) through OpenRouter. Set `SEARCH_PLANNER_FALLBACK_MODEL` to retry that model only when the primary planner is rate-limited with HTTP 429.
+The mock OTP code is `000000`. If `OPENROUTER_API_KEY` is empty, chat returns a local fallback response while still exercising persistence and billing. Add the Tavily and/or Alibaba IQS API keys to enable provider-independent web search for every configured answer model. `SEARCH_PRIMARY_PROVIDER` sets the initial fallback provider; after the database migration is applied, an administrator can change the active provider at runtime under **Admin → Search Settings** without restarting the API. Search defaults to `auto`; the chat API also accepts `searchMode: "off" | "explicit" | "auto"` when a caller needs an override. Automatic search planning uses `SEARCH_PLANNER_MODEL` (default: `deepseek/deepseek-v4-flash`) through OpenRouter. Set `SEARCH_PLANNER_FALLBACK_MODEL` to retry that model only when the primary planner is rate-limited with HTTP 429.
+
+To compare Tavily and Alibaba Cloud IQS UnifiedSearch with the same queries and result limit, configure both API keys and run:
+
+```sh
+npm run search:compare -- "latest Solana ecosystem news" "上海今天的重要科技新闻"
+```
+
+The command prints normalized results, latency, reported credits, and exact URL overlap as JSON. Judge relevance and source quality from the returned titles, snippets, and URLs; latency and overlap alone do not establish which provider is better.
 
 ## Deployment
 

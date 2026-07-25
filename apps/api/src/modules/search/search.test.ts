@@ -4,6 +4,7 @@ import { env } from "../../lib/env.js";
 import { buildAssistantInstructions } from "../context/assistant-instructions.js";
 import { buildExternalSearchContext } from "../context/external-content.js";
 import { completeOpenRouterStructured } from "../llm/openrouter.js";
+import { AliyunIqsProvider } from "./providers/aliyun-iqs-provider.js";
 import { TavilyProvider } from "./providers/tavily-provider.js";
 import { normalizeAndDeduplicateResults } from "./result-normalizer.js";
 import { planSearchAutomatically, toAutoSearchPlan } from "./search-planner.js";
@@ -448,6 +449,69 @@ test("Tavily adapter forwards exact-name and domain filters", async () => {
 
     assert.equal(requestBody?.exact_match, true);
     assert.deepEqual(requestBody?.include_domains, ["github.com"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Alibaba IQS adapter maps platform options and search evidence", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody: Record<string, any> | undefined;
+  let authorization: string | null | undefined;
+  globalThis.fetch = async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body));
+    authorization = new Headers(init?.headers).get("Authorization");
+    return new Response(JSON.stringify({
+      requestId: "iqs-request-1",
+      pageItems: [{
+        title: "Result",
+        link: "https://example.cn/story",
+        snippet: "Short evidence",
+        markdownText: "# Full evidence",
+        publishedTime: "2026-07-25T08:00:00+08:00",
+        rerankScore: 0.95
+      }],
+      costCredits: {
+        search: { genericTextSearch: 0, liteAdvancedTextSearch: 1 },
+        valueAdded: { summary: 0, advanced: 0 }
+      }
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const response = await new AliyunIqsProvider(
+      "iqs-key",
+      "https://cloud-iqs.aliyuncs.com/search/",
+      "LiteAdvanced"
+    ).search({
+      query: "最新科技新闻",
+      maxResults: 5,
+      freshness: "week",
+      includeRawContent: "markdown",
+      includeDomains: ["example.cn"]
+    }, new AbortController().signal);
+
+    assert.equal(authorization, "Bearer iqs-key");
+    assert.deepEqual(requestBody, {
+      query: "最新科技新闻",
+      engineType: "LiteAdvanced",
+      timeRange: "OneWeek",
+      contents: {
+        mainText: false,
+        markdownText: true,
+        summary: false,
+        rerankScore: true
+      },
+      advancedParams: {
+        numResults: "5",
+        includeSites: "example.cn"
+      }
+    });
+    assert.equal(response.requestId, "iqs-request-1");
+    assert.equal(response.cost, "1");
+    assert.equal(response.results[0].provider, "aliyun-iqs");
+    assert.equal(response.results[0].rawContent, "# Full evidence");
+    assert.equal(response.results[0].relevanceScore, 0.95);
   } finally {
     globalThis.fetch = originalFetch;
   }

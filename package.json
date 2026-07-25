@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "npm run dev --workspace @ai-chat/api & npm run dev --workspace @ai-chat/web",
     "build": "npm run build --workspace @ai-chat/shared && npm run prisma:generate && npm run build --workspace @ai-chat/api && npm run build --workspace @ai-chat/web",
+    "search:compare": "npm run search:compare --workspace @ai-chat/api --",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "prisma:generate": "prisma generate --schema apps/api/prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema apps/api/prisma/schema.prisma",
