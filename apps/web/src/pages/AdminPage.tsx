@@ -7,7 +7,7 @@ import { Modal } from "../components/Modal";
 import { api } from "../lib/api";
 
 type AdminSection = "users" | "redeem-codes" | "models" | "settings";
-type SearchProvider = "tavily" | "aliyun-iqs" | "baidu-qianfan" | "perplexity";
+type SearchProvider = "tavily" | "aliyun-iqs" | "baidu-qianfan" | "perplexity" | "doubao-search";
 type SearchSettings = {
   provider: SearchProvider;
   configured: Record<SearchProvider, boolean>;
@@ -472,6 +472,11 @@ function SearchSettingsPanel({ settings }: { settings?: SearchSettings }) {
       id: "perplexity",
       name: "Perplexity",
       description: "Real-time ranked web search with domain, language, and recency filtering."
+    },
+    {
+      id: "doubao-search",
+      name: "Doubao Search",
+      description: "Volcengine's Agent-ready web search with Chinese coverage, authority signals, and full-page extraction."
     }
   ];
 

@@ -6,6 +6,7 @@ import { buildExternalSearchContext } from "../context/external-content.js";
 import { completeOpenRouterStructured } from "../llm/openrouter.js";
 import { AliyunIqsProvider } from "./providers/aliyun-iqs-provider.js";
 import { BaiduQianfanProvider } from "./providers/baidu-qianfan-provider.js";
+import { DoubaoSearchProvider } from "./providers/doubao-search-provider.js";
 import { PerplexityProvider } from "./providers/perplexity-provider.js";
 import { TavilyProvider } from "./providers/tavily-provider.js";
 import { normalizeAndDeduplicateResults } from "./result-normalizer.js";
@@ -642,6 +643,110 @@ test("Perplexity adapter maps validation failures without leaking the response b
         assert.equal((error as { code?: string }).code, "invalid_request");
         assert.equal((error as { status?: number }).status, 422);
         assert.equal((error as Error).message, "Query is required");
+        return true;
+      }
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Doubao Search adapter follows the official Custom web-search contract", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestUrl: string | undefined;
+  let requestBody: Record<string, unknown> | undefined;
+  let authorization: string | null | undefined;
+  globalThis.fetch = async (input, init) => {
+    requestUrl = String(input);
+    requestBody = JSON.parse(String(init?.body));
+    authorization = new Headers(init?.headers).get("Authorization");
+    return new Response(JSON.stringify({
+      ResponseMetadata: {
+        RequestId: "doubao-request-1"
+      },
+      Result: {
+        ResultCount: 1,
+        TimeCost: 48,
+        LogId: "doubao-log-1",
+        WebResults: [{
+          Id: "result-1",
+          SortId: 1,
+          Title: "今日科技新闻",
+          SiteName: "示例网站",
+          Url: "https://example.cn/news",
+          Snippet: "新闻简短片段",
+          Summary: "与查询相关的摘要",
+          Content: "# 新闻正文",
+          PublishTime: "2026-07-28T08:00:00+08:00",
+          RankScore: 0.96,
+          AuthInfoDes: "正常权威",
+          AuthInfoLevel: 2
+        }]
+      }
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const response = await new DoubaoSearchProvider(
+      "doubao-key",
+      "https://open.feedcoopapi.com/"
+    ).search({
+      query: "今日科技新闻",
+      maxResults: 5,
+      freshness: "day",
+      includeRawContent: "markdown",
+      includeDomains: ["example.cn", "news.cn"]
+    }, new AbortController().signal);
+
+    assert.equal(requestUrl, "https://open.feedcoopapi.com/search_api/web_search");
+    assert.equal(authorization, "Bearer doubao-key");
+    assert.deepEqual(requestBody, {
+      Query: "今日科技新闻",
+      SearchType: "web",
+      Count: 5,
+      Filter: {
+        NeedContent: true,
+        NeedUrl: true,
+        Sites: "example.cn|news.cn"
+      },
+      TimeRange: "OneDay",
+      ContentFormats: "markdown"
+    });
+    assert.equal(response.requestId, "doubao-request-1");
+    assert.equal(response.results[0].provider, "doubao-search");
+    assert.equal(response.results[0].snippet, "与查询相关的摘要");
+    assert.equal(response.results[0].rawContent, "# 新闻正文");
+    assert.equal(response.results[0].publishedAt, "2026-07-28T08:00:00+08:00");
+    assert.equal(response.results[0].relevanceScore, 0.96);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Doubao Search adapter maps provider rate-limit errors", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    ResponseMetadata: {
+      RequestId: "doubao-request-2",
+      Error: {
+        CodeN: 700429,
+        Code: "FreeRateLimitExceeded",
+        Message: "Too many requests"
+      }
+    },
+    Result: null
+  }), { status: 200, headers: { "Content-Type": "application/json" } });
+
+  try {
+    await assert.rejects(
+      new DoubaoSearchProvider("doubao-key", "https://open.feedcoopapi.com").search({
+        query: "今日要闻",
+        maxResults: 5
+      }, new AbortController().signal),
+      (error: unknown) => {
+        assert.equal((error as { code?: string }).code, "rate_limited");
+        assert.equal((error as { retryable?: boolean }).retryable, true);
+        assert.match((error as Error).message, /FreeRateLimitExceeded/);
         return true;
       }
     );
