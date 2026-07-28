@@ -6,6 +6,7 @@ import { buildExternalSearchContext } from "../context/external-content.js";
 import { completeOpenRouterStructured } from "../llm/openrouter.js";
 import { AliyunIqsProvider } from "./providers/aliyun-iqs-provider.js";
 import { BaiduQianfanProvider } from "./providers/baidu-qianfan-provider.js";
+import { PerplexityProvider } from "./providers/perplexity-provider.js";
 import { TavilyProvider } from "./providers/tavily-provider.js";
 import { normalizeAndDeduplicateResults } from "./result-normalizer.js";
 import { planSearchAutomatically, toAutoSearchPlan } from "./search-planner.js";
@@ -566,6 +567,84 @@ test("Baidu Qianfan adapter sends web filters and maps references", async () => 
     assert.equal(response.results[0].provider, "baidu-qianfan");
     assert.equal(response.results[0].rawContent, "相关原文片段");
     assert.equal(response.results[0].relevanceScore, 0.93);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Perplexity adapter sends search filters and maps ranked results", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestUrl: string | undefined;
+  let requestBody: Record<string, unknown> | undefined;
+  let authorization: string | null | undefined;
+  globalThis.fetch = async (input, init) => {
+    requestUrl = String(input);
+    requestBody = JSON.parse(String(init?.body));
+    authorization = new Headers(init?.headers).get("Authorization");
+    return new Response(JSON.stringify({
+      id: "perplexity-request-1",
+      server_time: "2026-07-28T04:00:00Z",
+      results: [{
+        title: "Current report",
+        url: "https://example.com/perplexity",
+        snippet: "Extracted page evidence",
+        date: "2026-07-28"
+      }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const response = await new PerplexityProvider(
+      "perplexity-key",
+      "https://api.perplexity.ai/"
+    ).search({
+      query: "latest AI news",
+      maxResults: 5,
+      language: "en-US",
+      freshness: "day",
+      searchDepth: "advanced",
+      includeRawContent: "text",
+      includeDomains: ["example.com"]
+    }, new AbortController().signal);
+
+    assert.equal(requestUrl, "https://api.perplexity.ai/search");
+    assert.equal(authorization, "Bearer perplexity-key");
+    assert.deepEqual(requestBody, {
+      query: "latest AI news",
+      max_results: 5,
+      search_context_size: "high",
+      search_language_filter: ["en"],
+      search_domain_filter: ["example.com"],
+      search_recency_filter: "day"
+    });
+    assert.equal(response.requestId, "perplexity-request-1");
+    assert.equal(response.results[0].provider, "perplexity");
+    assert.equal(response.results[0].rawContent, "Extracted page evidence");
+    assert.equal(response.results[0].publishedAt, "2026-07-28");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Perplexity adapter maps validation failures without leaking the response body", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    detail: [{ loc: ["body", "query"], msg: "Query is required", type: "missing" }]
+  }), { status: 422, headers: { "Content-Type": "application/json" } });
+
+  try {
+    await assert.rejects(
+      new PerplexityProvider("perplexity-key", "https://api.perplexity.ai").search({
+        query: "",
+        maxResults: 5
+      }, new AbortController().signal),
+      (error: unknown) => {
+        assert.equal((error as { code?: string }).code, "invalid_request");
+        assert.equal((error as { status?: number }).status, 422);
+        assert.equal((error as Error).message, "Query is required");
+        return true;
+      }
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

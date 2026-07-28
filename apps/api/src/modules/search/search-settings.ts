@@ -1,7 +1,7 @@
 import { env } from "../../lib/env.js";
 import { prisma } from "../../lib/prisma.js";
 
-export const searchProviderIds = ["tavily", "aliyun-iqs", "baidu-qianfan"] as const;
+export const searchProviderIds = ["tavily", "aliyun-iqs", "baidu-qianfan", "perplexity"] as const;
 export type SearchProviderId = typeof searchProviderIds[number];
 
 const settingKey = "search.primaryProvider";
@@ -14,7 +14,8 @@ export function getSearchProviderAvailability(): Record<SearchProviderId, boolea
   return {
     tavily: Boolean(env.TAVILY_API_KEY),
     "aliyun-iqs": Boolean(env.ALIYUN_IQS_API_KEY),
-    "baidu-qianfan": Boolean(env.BAIDU_QIANFAN_API_KEY)
+    "baidu-qianfan": Boolean(env.BAIDU_QIANFAN_API_KEY),
+    perplexity: Boolean(env.PERPLEXITY_API_KEY)
   };
 }
 

@@ -30,18 +30,25 @@ V1 modular monolith for GANGHU AI, also named 工夫, with phone OTP login, app-
    npm run dev
    ```
 
-The mock OTP code is `000000`. If `OPENROUTER_API_KEY` is empty, chat returns a local fallback response while still exercising persistence and billing. Configure credentials for Tavily, Alibaba IQS, and/or Baidu Qianfan to enable provider-independent web search for every configured answer model. `SEARCH_PRIMARY_PROVIDER` sets the initial fallback provider; after the database migration is applied, an administrator can change the active provider at runtime under **Admin → Search Settings** without restarting the API. Search defaults to `auto`; the chat API also accepts `searchMode: "off" | "explicit" | "auto"` when a caller needs an override. Automatic search planning uses `SEARCH_PLANNER_MODEL` (default: `deepseek/deepseek-v4-flash`) through OpenRouter. Set `SEARCH_PLANNER_FALLBACK_MODEL` to retry that model only when the primary planner is rate-limited with HTTP 429.
+The mock OTP code is `000000`. If `OPENROUTER_API_KEY` is empty, chat returns a local fallback response while still exercising persistence and billing. Configure credentials for Tavily, Alibaba IQS, Baidu Qianfan, and/or Perplexity to enable provider-independent web search for every configured answer model. `SEARCH_PRIMARY_PROVIDER` sets the initial fallback provider; after the database migration is applied, an administrator can change the active provider at runtime under **Admin → Search Settings** without restarting the API. Search defaults to `auto`; the chat API also accepts `searchMode: "off" | "explicit" | "auto"` when a caller needs an override. Automatic search planning uses `SEARCH_PLANNER_MODEL` (default: `deepseek/deepseek-v4-flash`) through OpenRouter. Set `SEARCH_PLANNER_FALLBACK_MODEL` to retry that model only when the primary planner is rate-limited with HTTP 429.
 
 Search provider values:
 
 - `tavily`
 - `aliyun-iqs`
 - `baidu-qianfan`
+- `perplexity`
 
 Baidu Qianfan uses the raw `baidu_search_v2` web-search endpoint:
 
 ```env
 BAIDU_QIANFAN_API_KEY="..."
+```
+
+Perplexity uses its raw ranked-results Search API:
+
+```env
+PERPLEXITY_API_KEY="..."
 ```
 
 To compare Tavily and Alibaba Cloud IQS UnifiedSearch with the same queries and result limit, configure both API keys and run:
