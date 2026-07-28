@@ -7,7 +7,7 @@ import { Modal } from "../components/Modal";
 import { api } from "../lib/api";
 
 type AdminSection = "users" | "redeem-codes" | "models" | "settings";
-type SearchProvider = "tavily" | "aliyun-iqs";
+type SearchProvider = "tavily" | "aliyun-iqs" | "baidu-qianfan";
 type SearchSettings = {
   provider: SearchProvider;
   configured: Record<SearchProvider, boolean>;
@@ -462,6 +462,11 @@ function SearchSettingsPanel({ settings }: { settings?: SearchSettings }) {
       id: "aliyun-iqs",
       name: "Alibaba Cloud IQS",
       description: "UnifiedSearch optimized for agent search, semantic retrieval, and multilingual results."
+    },
+    {
+      id: "baidu-qianfan",
+      name: "Baidu Qianfan",
+      description: "Native Baidu web retrieval with Chinese coverage, recency controls, and source scoring."
     }
   ];
 
@@ -532,7 +537,7 @@ function SearchSettingsPanel({ settings }: { settings?: SearchSettings }) {
             )}
           </section>
           <section className="rounded-xl bg-[#ececec] p-4 text-sm font-semibold leading-relaxed text-[#808080] shadow-nm-in">
-            Provider credentials remain in the server environment and are never returned to the browser. Configure both API keys to make both choices available.
+            Provider credentials remain in the server environment and are never returned to the browser. Configure a provider's required credentials to make it selectable.
           </section>
         </div>
       )}

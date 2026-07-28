@@ -5,6 +5,7 @@ import { buildAssistantInstructions } from "../context/assistant-instructions.js
 import { buildExternalSearchContext } from "../context/external-content.js";
 import { completeOpenRouterStructured } from "../llm/openrouter.js";
 import { AliyunIqsProvider } from "./providers/aliyun-iqs-provider.js";
+import { BaiduQianfanProvider } from "./providers/baidu-qianfan-provider.js";
 import { TavilyProvider } from "./providers/tavily-provider.js";
 import { normalizeAndDeduplicateResults } from "./result-normalizer.js";
 import { planSearchAutomatically, toAutoSearchPlan } from "./search-planner.js";
@@ -512,6 +513,59 @@ test("Alibaba IQS adapter maps platform options and search evidence", async () =
     assert.equal(response.results[0].provider, "aliyun-iqs");
     assert.equal(response.results[0].rawContent, "# Full evidence");
     assert.equal(response.results[0].relevanceScore, 0.95);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Baidu Qianfan adapter sends web filters and maps references", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody: Record<string, any> | undefined;
+  let authorization: string | null | undefined;
+  globalThis.fetch = async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body));
+    authorization = new Headers(init?.headers).get("X-Appbuilder-Authorization");
+    return new Response(JSON.stringify({
+      request_id: "baidu-request-1",
+      references: [{
+        id: 1,
+        type: "web",
+        title: "百度搜索结果",
+        url: "https://example.cn/baidu",
+        snippet: "相关摘要",
+        content: "相关原文片段",
+        date: "2026-07-28 08:00:00",
+        rerank_score: 0.93
+      }]
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  try {
+    const response = await new BaiduQianfanProvider(
+      "baidu-key",
+      "https://qianfan.baidubce.com/"
+    ).search({
+      query: "今天的人工智能新闻",
+      maxResults: 5,
+      freshness: "day",
+      topic: "news",
+      includeRawContent: "text",
+      includeDomains: ["example.cn"]
+    }, new AbortController().signal);
+
+    assert.equal(authorization, "Bearer baidu-key");
+    assert.deepEqual(requestBody, {
+      messages: [{ role: "user", content: "今天的人工智能新闻" }],
+      search_source: "baidu_search_v2",
+      resource_type_filter: [{ type: "web", top_k: 5 }],
+      search_filter: { match: { site: ["example.cn"] } },
+      search_recency_filter: "week",
+      sort: { priority: "auto" }
+    });
+    assert.equal(response.requestId, "baidu-request-1");
+    assert.equal(response.results[0].provider, "baidu-qianfan");
+    assert.equal(response.results[0].rawContent, "相关原文片段");
+    assert.equal(response.results[0].relevanceScore, 0.93);
   } finally {
     globalThis.fetch = originalFetch;
   }

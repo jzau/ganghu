@@ -1,17 +1,20 @@
 import { env } from "../../lib/env.js";
 import type { SearchExecution, SearchMode, SearchRequest, SearchResult } from "./contracts.js";
 import { AliyunIqsProvider } from "./providers/aliyun-iqs-provider.js";
+import { BaiduQianfanProvider } from "./providers/baidu-qianfan-provider.js";
 import { TavilyProvider } from "./providers/tavily-provider.js";
 import { SearchGateway } from "./search-gateway.js";
 import { getActiveSearchProviderId, getSearchProviderAvailability } from "./search-settings.js";
 
 const providers = {
   tavily: new TavilyProvider(env.TAVILY_API_KEY, env.TAVILY_BASE_URL),
-  "aliyun-iqs": new AliyunIqsProvider(env.ALIYUN_IQS_API_KEY, env.ALIYUN_IQS_BASE_URL, env.ALIYUN_IQS_ENGINE_TYPE)
+  "aliyun-iqs": new AliyunIqsProvider(env.ALIYUN_IQS_API_KEY, env.ALIYUN_IQS_BASE_URL, env.ALIYUN_IQS_ENGINE_TYPE),
+  "baidu-qianfan": new BaiduQianfanProvider(env.BAIDU_QIANFAN_API_KEY, env.BAIDU_QIANFAN_BASE_URL)
 };
 const gateways = {
   tavily: new SearchGateway(providers.tavily, env.SEARCH_TIMEOUT_MS),
-  "aliyun-iqs": new SearchGateway(providers["aliyun-iqs"], env.SEARCH_TIMEOUT_MS)
+  "aliyun-iqs": new SearchGateway(providers["aliyun-iqs"], env.SEARCH_TIMEOUT_MS),
+  "baidu-qianfan": new SearchGateway(providers["baidu-qianfan"], env.SEARCH_TIMEOUT_MS)
 };
 
 export async function isPlatformSearchConfigured() {
