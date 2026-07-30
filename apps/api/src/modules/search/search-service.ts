@@ -489,7 +489,11 @@ export function filterResultsForPlan(results: SearchResult[], plan: AutoSearchPl
     .filter((result) => plan.category !== "news" || !matchesHost(result.url, nonNewsReferenceHosts))
     .filter((result) => plan.category !== "news" || !nonCurrentNewsTitlePattern.test(result.title))
     .filter((result) => plan.category !== "news" || isFreshEnough(result, plan.freshness!))
-    .filter((result) => result.relevanceScore === undefined || result.relevanceScore >= 0.35)
+    .filter((result) =>
+      result.relevanceScore === undefined ||
+      result.relevanceScore === 0 ||
+      result.relevanceScore >= 0.35
+    )
     .filter((result) => subjectTerms.length === 0 || resultContainsAnyTerm(result, subjectTerms))
     .sort((left, right) => scoreResult(right, plan) - scoreResult(left, plan));
 
@@ -508,7 +512,7 @@ export function shouldRetrySearch(results: SearchResult[], plan: AutoSearchPlan)
   if (plan.category !== "news" || plan.intent === "news_digest") return false;
   if (results.length < 2) return true;
   const strongResults = results.filter((result) =>
-    (result.relevanceScore ?? 0.5) >= 0.55 &&
+    (result.relevanceScore === undefined || result.relevanceScore === 0 ? 0.5 : result.relevanceScore) >= 0.55 &&
     isFreshEnough(result, plan.freshness ?? "week")
   );
   return strongResults.length < 1;

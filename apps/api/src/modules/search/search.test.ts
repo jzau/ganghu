@@ -755,6 +755,49 @@ test("Doubao Search adapter maps provider rate-limit errors", async () => {
   }
 });
 
+test("news filtering preserves valid Doubao results with a zero rank score", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    ResponseMetadata: {
+      RequestId: "doubao-request-zero-score"
+    },
+    Result: {
+      WebResults: [{
+        SortId: 1,
+        Title: "今日重要新闻",
+        Url: "https://example.cn/current-news",
+        Summary: "这是一条当天发布的有效新闻摘要。",
+        PublishTime: new Date().toISOString(),
+        RankScore: 0
+      }]
+    }
+  }), { status: 200, headers: { "Content-Type": "application/json" } });
+
+  try {
+    const response = await new DoubaoSearchProvider(
+      "doubao-key",
+      "https://open.feedcoopapi.com"
+    ).search({
+      query: "今日新闻",
+      maxResults: 5,
+      freshness: "day"
+    }, new AbortController().signal);
+
+    assert.equal(response.results[0].relevanceScore, 0);
+    const filtered = filterResultsForPlan(response.results, {
+      needsSearch: true,
+      query: "今日新闻",
+      category: "news",
+      intent: "news_digest",
+      freshness: "day",
+      reason: "fresh_information"
+    });
+    assert.equal(filtered.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("OpenRouter structured completion requires the planner JSON schema", async () => {
   const originalFetch = globalThis.fetch;
   let requestBody: Record<string, any> | undefined;
