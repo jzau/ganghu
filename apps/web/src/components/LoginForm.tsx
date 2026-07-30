@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
+import { brandText } from "../lib/branding";
 import { localizeErrorMessage, type Language } from "../lib/i18n";
 import { Button } from "./Button";
 
@@ -177,7 +178,7 @@ export function LoginForm({
       )}
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
       <p className="nm-login-consent">
-        {t.consentPrefix}{" "}
+        {brandText(t.consentPrefix, language)}{" "}
         <Link to="/terms-of-use" target="_blank" rel="noreferrer">
           {t.termsOfUse}
         </Link>{" "}

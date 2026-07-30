@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { BrandLockup } from "../components/BrandLockup";
+import { brandText } from "../lib/branding";
 import { useLanguage, type Language } from "../lib/i18n";
 
 type LegalPageKind = "terms" | "privacy";
@@ -188,12 +189,12 @@ export function LegalPage({ kind }: { kind: LegalPageKind }) {
         <article className="nm-legal-content">
           <p className="nm-legal-updated">{page.updated}</p>
           <h1>{page.title}</h1>
-          <p className="nm-legal-intro">{page.intro}</p>
+          <p className="nm-legal-intro">{brandText(page.intro, language)}</p>
           {page.sections.map((section) => (
             <section key={section.heading}>
               <h2>{section.heading}</h2>
               {section.body.map((paragraph) => (
-                <p key={paragraph}>{paragraph}</p>
+                <p key={paragraph}>{brandText(paragraph, language)}</p>
               ))}
             </section>
           ))}

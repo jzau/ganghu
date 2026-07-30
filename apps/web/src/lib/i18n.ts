@@ -1,14 +1,10 @@
 import { useEffect, useState } from "react";
+import { appNames } from "./branding";
 
 export type Language = "en" | "zh";
 
 const languageKey = "ganghu-language";
-const metadataAppName = "工夫AI";
-
-export const appNames: Record<Language, string> = {
-  en: "GANGHU AI",
-  zh: "工夫AI"
-};
+export { appNames } from "./branding";
 
 export const languageLabels: Record<Language, string> = {
   en: "English",
@@ -29,6 +25,7 @@ export function useLanguage() {
   const [language, setLanguageState] = useState<Language>(() => getInitialLanguage());
 
   useEffect(() => {
+    const metadataAppName = appNames[language];
     document.documentElement.lang = language === "zh" ? "zh-Hans" : "en";
     document.title = metadataAppName;
     updateMetaContent("name", "apple-mobile-web-app-title", metadataAppName);

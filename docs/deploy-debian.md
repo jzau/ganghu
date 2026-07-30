@@ -131,6 +131,8 @@ Example production values:
 DATABASE_URL="postgresql://ganghu:replace-with-strong-db-password@127.0.0.1:5433/ai_chat_app?schema=public"
 API_PORT=4000
 WEB_ORIGIN="https://your-domain.com"
+VITE_APP_NAME_EN="GANGHU AI"
+VITE_APP_NAME_ZH="工夫 AI"
 SESSION_SECRET="replace-with-a-long-random-secret-at-least-32-chars"
 ADMIN_PASSWORD="replace-with-strong-admin-password"
 
@@ -148,6 +150,7 @@ OPENROUTER_APP_NAME="GANGHU AI"
 Important:
 
 - `WEB_ORIGIN` must match the public frontend URL.
+- `VITE_APP_NAME_EN` and `VITE_APP_NAME_ZH` set the visible name, browser metadata, legal copy, and installed-app name. Because they are build-time values, run `npm run build` after changing them.
 - `OPENROUTER_SITE_URL` should also be the public frontend URL.
 - Keep `API_PORT=4000` unless you also update the Nginx proxy.
 - Use the PostgreSQL port from `sudo pg_lsclusters`.
