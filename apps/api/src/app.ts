@@ -11,6 +11,7 @@ import { modelRoutes } from "./modules/models/routes.js";
 import { redeemRoutes } from "./modules/redeem/routes.js";
 import { userRoutes } from "./modules/users/routes.js";
 import { chatRoutes } from "./modules/chat/routes.js";
+import { providerRoutes } from "./modules/provider/routes.js";
 
 export function buildApp() {
   const app = Fastify({
@@ -27,6 +28,7 @@ export function buildApp() {
   app.register(authPlugin);
 
   app.get("/health", async () => ({ ok: true }));
+  app.register(providerRoutes, { prefix: "/v1" });
   app.register(authRoutes, { prefix: "/api/auth" });
   app.register(userRoutes, { prefix: "/api" });
   app.register(modelRoutes, { prefix: "/api" });

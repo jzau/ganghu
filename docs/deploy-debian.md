@@ -32,7 +32,7 @@ then the remaining steps are:
    ```
 
 2. Configure Nginx to serve `apps/web/dist`.
-3. Configure Nginx to proxy `/api/` to `http://127.0.0.1:4000`.
+3. Configure Nginx to proxy `/api/` and `/v1/` to `http://127.0.0.1:4000`.
 4. Reload Nginx.
 5. Add HTTPS with Certbot.
 
@@ -145,6 +145,8 @@ OPENROUTER_API_KEY="your-openrouter-api-key"
 OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"
 OPENROUTER_SITE_URL="https://your-domain.com"
 OPENROUTER_APP_NAME="GANGHU AI"
+TOKING_PROVIDER_API_KEYS="replace-with-a-long-provider-secret"
+TOKING_PROVIDER_CONTRACT_VERSION="1"
 ```
 
 Important:
@@ -152,6 +154,7 @@ Important:
 - `WEB_ORIGIN` must match the public frontend URL.
 - `VITE_APP_NAME_EN` and `VITE_APP_NAME_ZH` set the visible name, browser metadata, legal copy, and installed-app name. Because they are build-time values, run `npm run build` after changing them.
 - `OPENROUTER_SITE_URL` should also be the public frontend URL.
+- `TOKING_PROVIDER_API_KEYS` contains the provider credential shared only with Toking. It is unrelated to Toking customer API keys.
 - Keep `API_PORT=4000` unless you also update the Nginx proxy.
 - Use the PostgreSQL port from `sudo pg_lsclusters`.
 
@@ -215,6 +218,17 @@ server {
     index index.html;
 
     location /api/ {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_read_timeout 300s;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /v1/ {
         proxy_pass http://127.0.0.1:4000;
         proxy_http_version 1.1;
         proxy_buffering off;
@@ -295,6 +309,14 @@ Check through Nginx:
 
 ```sh
 curl https://your-domain.com/health
+```
+
+Check the authenticated Gangram provider catalog through Nginx:
+
+```sh
+curl https://gangram.ai/v1/models \
+  -H 'Authorization: Bearer replace-with-a-long-provider-secret' \
+  -H 'X-Toking-Provider-Contract: 1'
 ```
 
 Open:
