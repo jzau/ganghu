@@ -6,3 +6,6 @@ dist
 coverage
 apps/web/dist
 apps/api/dist
+
+# Local design reference; never ship or commit.
+/gangram-new-ui/

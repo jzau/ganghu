@@ -7,6 +7,7 @@ import { ChatPage } from "./pages/ChatPage";
 import { LegalPage } from "./pages/LegalPage";
 import { SharedConversationPage } from "./pages/SharedConversationPage";
 import "./styles.css";
+import "./design.css";
 
 const queryClient = new QueryClient();
 

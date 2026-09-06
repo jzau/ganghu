@@ -1,6 +1,6 @@
 import type { ApiUser, LlmModelDto, MessageDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Plus, Send, Sparkles, Square, Ticket, Trash2, Upload, UserRound } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Gift, Globe, Menu, ChevronsLeft, ChevronsRight, SquarePen, ArrowUp, Sparkles, Square, Ticket, Trash2, Upload, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useNavigate, useParams } from "react-router-dom";
@@ -8,9 +8,10 @@ import remarkGfm from "remark-gfm";
 import { BrandLockup } from "../components/BrandLockup";
 import { Button } from "../components/Button";
 import { LoginForm } from "../components/LoginForm";
+import { SettingsDialog } from "../components/SettingsDialog";
 import { Modal } from "../components/Modal";
 import { api, endpoints } from "../lib/api";
-import { commonText, languageLabels, localizeErrorMessage, useLanguage, type Language } from "../lib/i18n";
+import { commonText, localizeErrorMessage, useLanguage, type Language } from "../lib/i18n";
 
 const chatText = {
   en: {
@@ -204,6 +205,8 @@ export function ChatPage() {
   const activeConversationIdRef = useRef(routeConversationId);
   const [draft, setDraft] = useState("");
   const [modelId, setModelId] = useState("");
+  const [webSearch, setWebSearch] = useState(false);
+  const initializedModelConversation = useRef<string | null>(null);
   const [pendingUserMessage, setPendingUserMessage] = useState<MessageDto | null>(null);
   const [completedAssistantMessage, setCompletedAssistantMessage] = useState<MessageDto | null>(null);
   const [streamingConversationId, setStreamingConversationId] = useState("");
@@ -308,7 +311,7 @@ export function ChatPage() {
   }, [activeConversationId, completedAssistantMessage, messages.data, modelId, pendingUserMessage, streamingConversationId, streamingText]);
 
   const persistedMessages = messages.data?.messages ?? [];
-  const conversationModelId = persistedMessages.find((message) => message.role === "assistant" && message.modelId)?.modelId ?? null;
+  const conversationModelId = [...persistedMessages].reverse().find((message) => message.role === "assistant" && message.modelId)?.modelId ?? null;
   const hasPendingMessage =
     pendingUserMessage &&
     pendingUserMessage.conversationId === activeConversationId;
@@ -317,8 +320,7 @@ export function ChatPage() {
   const modelSelectionLocked =
     conversationIsLoading ||
     Boolean(hasPendingMessage) ||
-    Boolean(streamingText && streamingConversationId === activeConversationId) ||
-    Boolean(conversationModelId);
+    isSending;
   const selectedModel = models.data?.models.find((model) => model.id === modelId) ?? models.data?.models[0];
   const modelGroups = useMemo(() => {
     const groups = new Map<string, LlmModelDto[]>();
@@ -338,8 +340,11 @@ export function ChatPage() {
   const activeConversationTitle = activeConversation ? conversationTitleForLanguage(activeConversation.title, language) : t.startConversation;
 
   useEffect(() => {
-    if (conversationModelId && modelId !== conversationModelId) setModelId(conversationModelId);
-  }, [conversationModelId, modelId]);
+    if (initializedModelConversation.current === activeConversationId) return;
+    if (activeConversationId && !messages.data) return;
+    initializedModelConversation.current = activeConversationId;
+    if (conversationModelId) setModelId(conversationModelId);
+  }, [activeConversationId, conversationModelId, messages.data]);
 
   useEffect(() => {
     if (modelSelectionLocked) {
@@ -359,7 +364,7 @@ export function ChatPage() {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (accountMenuRef.current?.contains(target) || modelMenuRef.current?.contains(target)) return;
-      if (target instanceof Element && target.closest(".nm-history-item")) return;
+      if (target instanceof Element && target.closest(".nm-history-item, .gg-settings-backdrop")) return;
       setAccountMenuOpen(false);
       setAccountMenuView("main");
       setModelMenuOpen(false);
@@ -420,7 +425,7 @@ export function ChatPage() {
         signal: abortController.signal,
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId: activeConversationId || undefined, modelId, message, searchMode: "auto" })
+        body: JSON.stringify({ conversationId: activeConversationId || undefined, modelId, message, searchMode: webSearch ? "explicit" : "off" })
       });
       if (!response.ok) {
         const error = await response.json().catch(() => ({ message: t.chatFailed }));
@@ -593,15 +598,14 @@ export function ChatPage() {
                 aria-label={sidebarCollapsed ? t.reopenSidebar : t.collapseSidebar}
                 title={sidebarCollapsed ? t.reopenSidebar : t.collapseSidebar}
               >
-                {sidebarCollapsed && <span className="nm-sidebar-toggle-logo" aria-hidden="true">⏳</span>}
                 <span className="nm-sidebar-toggle-icon" aria-hidden="true">
-                  {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+                  {sidebarCollapsed ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
                 </span>
               </button>
             </div>
 
             <button className="nm-action" onClick={startNewChat} disabled={isSending} title={t.newChat}>
-              <Plus size={16} />
+              <SquarePen size={14} />
               <span className="nm-action-label">{t.newChat}</span>
             </button>
 
@@ -660,21 +664,27 @@ export function ChatPage() {
                 </div>
                 <Menu size={15} className="nm-account-menu-icon shrink-0 opacity-50" />
               </button>
-              {accountMenuOpen && (
-                <div className={`nm-account-menu ${scrollingAreas.accountMenu ? "is-scrolling" : ""}`} onScroll={() => markScrolling("accountMenu")}>
-                  {accountMenuView === "redeem" ? (
-                    <RedeemCodeMenu language={language} />
-                  ) : (
-                    <AccountMenuActions
-                      language={language}
-                      phoneNumber={phoneNumber}
-                      onRedeem={() => setAccountMenuView("redeem")}
-                      onLanguageChange={() => {
-                        setLanguage(language === "en" ? "zh" : "en");
-                        setAccountMenuOpen(false);
-                        setAccountMenuView("main");
-                      }}
-                      onLogout={async () => {
+              <button
+                className="nm-redeem-entry"
+                onClick={() => {
+                  if (!requireAuth()) return;
+                  setAccountMenuView("redeem");
+                  setAccountMenuOpen(true);
+                }}
+                title={common.redeem}
+              >
+                <Gift size={14} />
+                <span>{language === "en" ? "Redeem Gift Card" : "兑换礼品卡"}</span>
+              </button>
+              {accountMenuOpen && me.data?.user && (
+                <SettingsDialog
+                  language={language}
+                  onLanguageChange={setLanguage}
+                  user={me.data.user}
+                  initialSection={accountMenuView === "redeem" ? "tokens" : "profile"}
+                  onClose={() => { setAccountMenuOpen(false); setAccountMenuView("main"); }}
+                  redeem={<RedeemCodeMenu language={language} />}
+                  onLogout={async () => {
                         await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
                         setActiveConversationId("");
                         setPendingUserMessage(null);
@@ -687,9 +697,7 @@ export function ChatPage() {
                         queryClient.removeQueries({ queryKey: ["messages"] });
                         queryClient.resetQueries({ queryKey: ["me"] });
                       }}
-                    />
-                  )}
-                </div>
+                />
               )}
             </div>
           </aside>
@@ -697,9 +705,83 @@ export function ChatPage() {
           <section className="nm-chat">
             <header className="nm-chat-header">
               <button className="nm-icon-button md:hidden" onClick={() => setSidebarOpen(true)} aria-label={t.openConversations}>
-                <span className="nm-mobile-menu-logo" aria-hidden="true">⏳</span>
+                <Menu size={16} />
               </button>
 
+
+
+              {!isAuthenticated ? (
+                <button className="nm-login-entry ml-auto" onClick={() => setLoginDialogOpen(true)}>
+                  {language === "en" ? "Log in" : "登录"}
+                </button>
+              ) : (
+              <button
+                className="nm-icon-button nm-share-button ml-auto"
+                onClick={() => {
+                  if (!shareDisabled) shareConversation.mutate(activeConversationId);
+                }}
+                aria-label={t.shareConversation}
+                title={t.shareConversation}
+                disabled={shareDisabled}
+              >
+                {shareConversation.isPending ? <span className="nm-button-spinner" aria-hidden="true" /> : <Upload size={18} />}
+              </button>
+              )}
+            </header>
+
+            <div className={`nm-messages ${scrollingAreas.messages ? "is-scrolling" : ""}`} onScroll={() => markScrolling("messages")}>
+              <div className="nm-message-column">
+                {allMessages.length === 0 && (
+                  <div className="nm-empty">
+                    <p className="nm-empty-eyebrow">GANGRAM</p>
+                    <h1>{activeConversationId ? activeConversationTitle : language === "en" ? "Ask anything." : "有什么想问的？"}</h1>
+                    <p className="nm-empty-description">{t.emptyHint}</p>
+                  </div>
+                )}
+                {allMessages.map((message) => (
+                  <div key={message.renderKey ?? message.id} className={`nm-message ${message.role === "user" ? "is-user" : "is-assistant"}`}>
+                    <div className="nm-bubble">
+                      <MessageContent message={message} />
+                    </div>
+                  </div>
+                ))}
+                {isActiveConversationSending && !streamingText && !completedAssistantMessage && (
+                  <div className="nm-message is-assistant is-loading" aria-live="polite" aria-label={t.thinking}>
+                    <div className="nm-bubble nm-typing">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} aria-hidden="true" />
+              </div>
+            </div>
+
+            <footer className="nm-composer-wrap">
+              <div className="nm-composer">
+                <textarea
+                  className="nm-input"
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder={t.messagePlaceholder}
+                  onCompositionStart={() => {
+                    composingMessageRef.current = true;
+                  }}
+                  onCompositionEnd={() => {
+                    composingMessageRef.current = false;
+                  }}
+                  onKeyDown={(event) => {
+                    const nativeEvent = event.nativeEvent as KeyboardEvent;
+                    if (composingMessageRef.current || nativeEvent.isComposing || nativeEvent.keyCode === 229) return;
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.blur();
+                      sendMessage();
+                    }
+                  }}
+                />
+                <div className="nm-composer-toolbar">
               <div className="relative min-w-0" ref={modelMenuRef}>
                 <button
                   className={`nm-model-button ${modelMenuOpen ? "is-open" : ""}`}
@@ -815,80 +897,25 @@ export function ChatPage() {
                   </div>
                 )}
               </div>
-
-              <button
-                className="nm-icon-button nm-share-button ml-auto"
-                onClick={() => {
-                  if (!shareDisabled) shareConversation.mutate(activeConversationId);
-                }}
-                aria-label={t.shareConversation}
-                title={t.shareConversation}
-                disabled={shareDisabled}
-              >
-                {shareConversation.isPending ? <span className="nm-button-spinner" aria-hidden="true" /> : <Upload size={18} />}
-              </button>
-            </header>
-
-            <div className={`nm-messages ${scrollingAreas.messages ? "is-scrolling" : ""}`} onScroll={() => markScrolling("messages")}>
-              <div className="nm-message-column">
-                {allMessages.length === 0 && (
-                  <div className="nm-empty">
-                    <div className="nm-empty-icon nm-logo-mark" aria-hidden="true">⏳</div>
-                    <div className="font-bold">{activeConversationTitle}</div>
-                    <div className="mt-1 text-sm text-[#808080]">{t.emptyHint}</div>
-                  </div>
-                )}
-                {allMessages.map((message) => (
-                  <div key={message.renderKey ?? message.id} className={`nm-message ${message.role === "user" ? "is-user" : "is-assistant"}`}>
-                    <div className="nm-bubble">
-                      <MessageContent message={message} />
-                    </div>
-                  </div>
-                ))}
-                {isActiveConversationSending && !streamingText && !completedAssistantMessage && (
-                  <div className="nm-message is-assistant is-loading" aria-live="polite" aria-label={t.thinking}>
-                    <div className="nm-bubble nm-typing">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                  </div>
-                )}
-                <div ref={messagesEndRef} aria-hidden="true" />
-              </div>
-            </div>
-
-            <footer className="nm-composer-wrap">
-              <div className="nm-composer">
-                <textarea
-                  className="nm-input"
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  placeholder={t.messagePlaceholder}
-                  onCompositionStart={() => {
-                    composingMessageRef.current = true;
-                  }}
-                  onCompositionEnd={() => {
-                    composingMessageRef.current = false;
-                  }}
-                  onKeyDown={(event) => {
-                    const nativeEvent = event.nativeEvent as KeyboardEvent;
-                    if (composingMessageRef.current || nativeEvent.isComposing || nativeEvent.keyCode === 229) return;
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      event.currentTarget.blur();
-                      sendMessage();
-                    }
-                  }}
-                />
+                <button
+                  className="gg-web-toggle"
+                  aria-label={language === "en" ? `Web search ${webSearch ? "on" : "off"}` : `联网搜索${webSearch ? "已开启" : "已关闭"}`}
+                  aria-pressed={webSearch}
+                  disabled={isSending}
+                  onClick={() => setWebSearch((on) => !on)}
+                  title={language === "en" ? "Search the web for the next message" : "为下一条消息搜索网页"}
+                >
+                  <Globe size={14} /><span>Web</span><span className={`gg-web-dot ${webSearch ? "is-on" : ""}`} />
+                </button>
                 <Button
                   className={`nm-send-button px-0 disabled:!cursor-default ${isActiveConversationSending ? "is-stop" : ""}`}
                   onClick={isActiveConversationSending ? stopResponse : sendMessage}
                   aria-label={isActiveConversationSending ? t.stopResponse : t.sendMessage}
                   disabled={isActiveConversationSending ? false : isSending || !draft.trim() || !modelId || conversationIsLoading}
                 >
-                  {isActiveConversationSending ? <Square size={17} fill="currentColor" /> : <Send size={20} />}
+                  {isActiveConversationSending ? <Square size={17} fill="currentColor" /> : <ArrowUp size={16} />}
                 </Button>
+                </div>
               </div>
             </footer>
           </section>
@@ -939,45 +966,6 @@ export function MessageContent({ message }: { message: MessageDto }) {
     >
       {message.content}
     </ReactMarkdown>
-  );
-}
-
-function AccountMenuActions({
-  language,
-  phoneNumber,
-  onRedeem,
-  onLanguageChange,
-  onLogout
-}: {
-  language: Language;
-  phoneNumber: string;
-  onRedeem: () => void;
-  onLanguageChange: () => void;
-  onLogout: () => void | Promise<void>;
-}) {
-  const common = commonText[language];
-
-  return (
-    <>
-      <div className="nm-account-menu-item nm-account-menu-info">
-        <UserRound size={16} />
-        <span>{common.account}</span>
-        <span className="nm-account-menu-value">{phoneNumber}</span>
-      </div>
-      <button className="nm-account-menu-item" onClick={onRedeem}>
-        <Ticket size={16} />
-        <span>{common.redeem}</span>
-      </button>
-      <button className="nm-account-menu-item" onClick={onLanguageChange}>
-        <Languages size={16} />
-        <span>{common.language}</span>
-        <span className="nm-account-menu-value">{languageLabels[language === "en" ? "zh" : "en"]}</span>
-      </button>
-      <button className="nm-account-menu-item" onClick={() => void onLogout()}>
-        <LogOut size={16} />
-        <span>{common.logout}</span>
-      </button>
-    </>
   );
 }
 

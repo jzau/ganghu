@@ -205,7 +205,8 @@ export const providerRoutes: FastifyPluginAsync<ProviderRouteOptions> = async (a
 
     const handleEvent = (event: string) => {
       const dataLine = event.split("\n").find((line) => line.startsWith("data:"));
-      if (!dataLine) throw new Error("Missing SSE data field");
+      // SSE comments (including OpenRouter keepalives) carry no model data.
+      if (!dataLine) return;
       const data = dataLine.slice(5).trim();
       if (data === "[DONE]") {
         sawDone = true;

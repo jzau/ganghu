@@ -119,8 +119,10 @@ test("provider chat proxies inference without using chatbot user or billing rout
   await app.close();
 });
 
-test("provider chat passes OpenAI-compatible streams and final usage through", async () => {
+test("provider chat ignores OpenRouter keepalives and passes model output and final usage through", async () => {
   const events = [
+    ": OPENROUTER PROCESSING\n\n",
+    ": keepalive\n\n",
     'data: {"id":"generation-stream","object":"chat.completion.chunk","created":1788220800,"model":"openai/gpt-test","choices":[{"index":0,"delta":{"content":"Hi"}}],"usage":null}\n\n',
     'data: {"id":"generation-stream","object":"chat.completion.chunk","created":1788220800,"model":"openai/gpt-test","choices":[],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3,"cost":"0.00001"}}\n\n',
     "data: [DONE]\n\n"
@@ -147,6 +149,7 @@ test("provider chat passes OpenAI-compatible streams and final usage through", a
   assert.match(String(response.headers["content-type"] ?? ""), /text\/event-stream/);
   assert.match(response.body, /"content":"Hi"/);
   assert.match(response.body, /"cost":"0.00001"/);
+  assert.doesNotMatch(response.body, /"error"|OPENROUTER PROCESSING/);
   assert.match(response.body, /data: \[DONE\]/);
   await app.close();
 });

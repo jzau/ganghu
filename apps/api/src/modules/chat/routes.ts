@@ -124,15 +124,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       : await findOrCreateDraftConversation(userId, input.message);
     if (!conversation) return reply.code(404).send({ message: "Conversation not found" });
 
-    const conversationModel = await prisma.message.findFirst({
-      where: { conversationId: conversation.id, role: "assistant", modelId: { not: null } },
-      orderBy: { createdAt: "asc" },
-      select: { modelId: true }
-    });
-    if (conversationModel?.modelId && conversationModel.modelId !== model.id) {
-      return reply.code(409).send({ message: "Model cannot be changed after a conversation has started" });
-    }
-
+    // Each turn chooses its own enabled model; history remains shared across models.
     const userMessage = await prisma.message.create({
       data: { conversationId: conversation.id, role: "user", content: input.message, modelId: model.id }
     });
