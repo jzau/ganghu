@@ -21,6 +21,7 @@ model User {
   redemptions        RedeemCodeRedemption[]
   ledgerEntries      AppTokenLedger[]
   conversations      Conversation[]
+  paymentOrders      PaymentOrder[]
   usageRecords       ChatUsageRecord[]
 
   @@map("users")
@@ -200,8 +201,35 @@ enum MessageRole {
 }
 
 enum LedgerType {
+  payment
   redeem
   chat_usage
   admin_adjustment
   refund
+}
+
+// Keep order audit records when an account is deleted; never credit a deleted account.
+model PaymentOrder {
+  id               String   @id @default(cuid())
+  userId           String?  @map("user_id")
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  requestKey       String   @map("request_key")
+  offerId          String   @map("offer_id")
+  methodId         String   @map("method_id")
+  provider         String
+  amountMinor      Int      @map("amount_minor")
+  currency         String
+  appTokenAmount   Int      @map("app_token_amount")
+  status           String   @default("creating")
+  remotePaymentId  String?  @unique @map("remote_payment_id")
+  approvalUrl      String?  @map("approval_url")
+  creditedAt       DateTime? @map("credited_at")
+  lastCheckedAt    DateTime? @map("last_checked_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, requestKey])
+  @@index([userId, createdAt])
+  @@index([status, lastCheckedAt])
+  @@map("payment_orders")
 }

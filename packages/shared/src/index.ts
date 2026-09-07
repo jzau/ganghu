@@ -1,6 +1,6 @@
 export type UserStatus = "active" | "disabled";
 export type MessageRole = "system" | "user" | "assistant";
-export type LedgerType = "redeem" | "chat_usage" | "admin_adjustment" | "refund";
+export type LedgerType = "payment" | "redeem" | "chat_usage" | "admin_adjustment" | "refund";
 
 export interface ApiUser {
   id: string;
@@ -39,6 +39,14 @@ export interface ConversationDto {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface ConversationSearchResultDto {
+  id: string;
+  title: string;
+  snippet: string | null;
+  updatedAt: string;
+}
+
 
 export interface MessageDto {
   id: string;
@@ -83,3 +91,34 @@ export type StreamEvent =
   | { type: "delta"; content: string }
   | { type: "done"; message: MessageDto; sources?: SourceDto[]; usage: ChatUsageDto }
   | { type: "error"; code: string; message: string; retryable?: boolean };
+
+export interface PaymentOfferDto {
+  id: string;
+  amountMinor: number;
+  currency: string;
+  appTokenAmount: number;
+}
+export interface PaymentMethodDto {
+  id: string;
+  label: string;
+  labelZh: string;
+  provider: string;
+  currencies: string[];
+}
+export interface PaymentCatalogDto {
+  enabled: boolean;
+  offers: PaymentOfferDto[];
+  methods: PaymentMethodDto[];
+}
+export interface PaymentOrderDto {
+  id: string;
+  offerId: string;
+  methodId: string;
+  amountMinor: number;
+  currency: string;
+  appTokenAmount: number;
+  status: string;
+  approvalUrl: string | null;
+  createdAt: string;
+  creditedAt: string | null;
+}

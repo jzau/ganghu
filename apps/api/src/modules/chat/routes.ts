@@ -31,6 +31,43 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     return { conversations: conversations.map(toConversationDto) };
   });
 
+  app.get("/conversations/search", { preHandler: app.authenticateUser }, async (request, reply) => {
+    const parsed = z.object({ q: z.string().trim().min(1).max(120) }).safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ message: "Enter a search term" });
+    const query = parsed.data.q;
+    const conversations = await prisma.conversation.findMany({
+      where: {
+        userId: request.user!.id,
+        deletedAt: null,
+        OR: [
+          { title: { contains: query, mode: "insensitive" } },
+          { messages: { some: { content: { contains: query, mode: "insensitive" } } } }
+        ]
+      },
+      select: {
+        id: true,
+        title: true,
+        updatedAt: true,
+        messages: {
+          where: { content: { contains: query, mode: "insensitive" } },
+          select: { content: true },
+          orderBy: { createdAt: "desc" },
+          take: 1
+        }
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 30
+    });
+    return {
+      results: conversations.map((conversation) => ({
+        id: conversation.id,
+        title: conversation.title,
+        snippet: conversation.messages[0]?.content.slice(0, 220) ?? null,
+        updatedAt: conversation.updatedAt.toISOString()
+      }))
+    };
+  });
+
   app.post("/conversations", { preHandler: app.authenticateUser }, async (request) => {
     const input = createConversationSchema.parse(request.body);
     const draftConversation = await prisma.conversation.findFirst({

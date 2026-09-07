@@ -81,3 +81,7 @@ See [Deploy to Debian](docs/deploy-debian.md) for the production setup with Post
 ## Future Clients
 
 The web app uses the same JSON API and shared DTO package intended for future iOS, Android, and desktop clients. Session tokens are set as httpOnly cookies for web and also returned from login endpoints so native clients can store and send them as bearer tokens.
+
+## Payments
+
+The Recharge screen integrates with the shared Callcoin payment service. Payments are disabled until configured. See [integration and setup](docs/payment-integration.md) and [required payment-service fixes](docs/payment-service-fixes.md).

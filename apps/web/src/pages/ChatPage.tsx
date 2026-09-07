@@ -1,15 +1,14 @@
 import type { ApiUser, LlmModelDto, MessageDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Gift, Globe, Menu, ChevronsLeft, ChevronsRight, SquarePen, ArrowUp, Sparkles, Square, Ticket, Trash2, Upload, UserRound } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Gift, Globe, Menu, ChevronsLeft, ChevronsRight, SquarePen, ArrowUp, Sparkles, Square, Ticket, Trash2, Upload, UserRound, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useNavigate, useParams } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 import { BrandLockup } from "../components/BrandLockup";
 import { Button } from "../components/Button";
-import { LoginForm } from "../components/LoginForm";
 import { SettingsDialog } from "../components/SettingsDialog";
-import { Modal } from "../components/Modal";
+import { SearchDialog } from "../components/SearchDialog";
 import { api, endpoints } from "../lib/api";
 import { commonText, localizeErrorMessage, useLanguage, type Language } from "../lib/i18n";
 
@@ -18,8 +17,9 @@ const chatText = {
     loading: "Loading",
     closeConversations: "Close conversations",
     home: "Go to homepage",
-    newChat: "New chat",
-    history: "History",
+    newChat: "New conversation",
+    history: "Recent",
+    search: "Search",
     collapseSidebar: "Collapse sidebar",
     openAccountMenu: "Open account menu",
     openConversations: "Open conversations",
@@ -55,7 +55,8 @@ const chatText = {
     closeConversations: "关闭会话列表",
     home: "返回首页",
     newChat: "新建对话",
-    history: "历史记录",
+    history: "最近对话",
+    search: "搜索",
     collapseSidebar: "收起侧边栏",
     openAccountMenu: "打开账户菜单",
     openConversations: "打开会话列表",
@@ -214,14 +215,14 @@ export function ChatPage() {
   const [toastMessage, setToastMessage] = useState("");
   const [toastKind, setToastKind] = useState<"error" | "success">("error");
   const [isSending, setIsSending] = useState(false);
-  const [accountMenuView, setAccountMenuView] = useState<"main" | "redeem">("main");
+  const [accountMenuView, setAccountMenuView] = useState<"main" | "redeem" | "recharge">(() => new URLSearchParams(window.location.search).has("payment") ? "recharge" : "main");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [openModelGroupKey, setOpenModelGroupKey] = useState<string | null>(null);
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(() => new URLSearchParams(window.location.search).has("payment"));
   const [scrollingAreas, setScrollingAreas] = useState<Record<string, boolean>>({});
-  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [searchDialogOpen, setSearchDialogOpen] = useState(false);
   const [revealedDeleteConversationId, setRevealedDeleteConversationId] = useState<string | null>(null);
 
   const me = useQuery({ queryKey: ["me"], queryFn: endpoints.me, retry: false });
@@ -340,6 +341,18 @@ export function ChatPage() {
   const activeConversationTitle = activeConversation ? conversationTitleForLanguage(activeConversation.title, language) : t.startConversation;
 
   useEffect(() => {
+    function openSearch(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        if (isAuthenticated) setSearchDialogOpen(true);
+        else navigate(`/login?returnTo=${encodeURIComponent(window.location.pathname)}`);
+      }
+    }
+    document.addEventListener("keydown", openSearch);
+    return () => document.removeEventListener("keydown", openSearch);
+  }, [isAuthenticated, navigate]);
+
+  useEffect(() => {
     if (initializedModelConversation.current === activeConversationId) return;
     if (activeConversationId && !messages.data) return;
     initializedModelConversation.current = activeConversationId;
@@ -388,7 +401,7 @@ export function ChatPage() {
     if (isAuthenticated) return true;
     setAccountMenuOpen(false);
     setAccountMenuView("main");
-    setLoginDialogOpen(true);
+    navigate(`/login?returnTo=${encodeURIComponent(window.location.pathname)}`);
     return false;
   }
 
@@ -588,6 +601,9 @@ export function ChatPage() {
               <a className="nm-brand nm-sidebar-brand nm-brand-home" href="/" aria-label={t.home} title={t.home}>
                 <BrandLockup language={language} />
               </a>
+              <button className="nm-icon-button nm-sidebar-search" onClick={() => { if (requireAuth()) setSearchDialogOpen(true); }} aria-label={t.search} title={`${t.search} (⌘K)`}>
+                <Search size={14} />
+              </button>
               <button
                 className="nm-icon-button nm-sidebar-toggle hidden md:grid"
                 onClick={() => {
@@ -681,7 +697,7 @@ export function ChatPage() {
                   language={language}
                   onLanguageChange={setLanguage}
                   user={me.data.user}
-                  initialSection={accountMenuView === "redeem" ? "tokens" : "profile"}
+                  initialSection={accountMenuView === "redeem" ? "tokens" : accountMenuView === "recharge" ? "credits" : "profile"}
                   onClose={() => { setAccountMenuOpen(false); setAccountMenuView("main"); }}
                   redeem={<RedeemCodeMenu language={language} />}
                   onLogout={async () => {
@@ -697,6 +713,15 @@ export function ChatPage() {
                         queryClient.removeQueries({ queryKey: ["messages"] });
                         queryClient.resetQueries({ queryKey: ["me"] });
                       }}
+                  onAccountDeleted={() => {
+                    setActiveConversationId("");
+                    setPendingUserMessage(null);
+                    setCompletedAssistantMessage(null);
+                    setStreamingText("");
+                    setAccountMenuOpen(false);
+                    queryClient.clear();
+                    navigate("/");
+                  }}
                 />
               )}
             </div>
@@ -711,7 +736,7 @@ export function ChatPage() {
 
 
               {!isAuthenticated ? (
-                <button className="nm-login-entry ml-auto" onClick={() => setLoginDialogOpen(true)}>
+                <button className="nm-login-entry ml-auto" onClick={() => navigate(`/login?returnTo=${encodeURIComponent(window.location.pathname)}`)}>
                   {language === "en" ? "Log in" : "登录"}
                 </button>
               ) : (
@@ -927,24 +952,19 @@ export function ChatPage() {
           <span>{toastMessage}</span>
         </div>
       )}
-      {loginDialogOpen && (
-        <Modal
-          title={t.signInRequired}
-          onClose={() => setLoginDialogOpen(false)}
-          className="nm-login-modal max-w-sm"
-          titleClassName="!text-sm !font-medium"
-          hideCloseButton
-          closeOnBackdrop
-        >
-          <LoginForm
-            language={language}
-            onSuccess={() => {
-              setLoginDialogOpen(false);
-              queryClient.invalidateQueries({ queryKey: ["me"] });
-              queryClient.invalidateQueries({ queryKey: ["conversations"] });
-            }}
-          />
-        </Modal>
+      {searchDialogOpen && (
+        <SearchDialog
+          language={language}
+          recent={visibleConversations}
+          onClose={() => setSearchDialogOpen(false)}
+          onSelect={(conversationId) => {
+            setSearchDialogOpen(false);
+            setSidebarOpen(false);
+            setActiveConversationId(conversationId);
+            activeConversationIdRef.current = conversationId;
+            navigate(`/c/${conversationId}`);
+          }}
+        />
       )}
     </main>
   );

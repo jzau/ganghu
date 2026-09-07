@@ -18,7 +18,9 @@ svg.lucide,svg.lucide :where(path,circle,rect,line,polyline,polygon,ellipse) { s
 .nm-chat-page .nm-chat { position: relative; }
 .nm-brand-lockup { height: 40px; padding: 0 10px; border-radius: 0; background: transparent; box-shadow: none; }
 .nm-brand-name,.nm-brand-name.is-en,.nm-brand-name.is-zh { font-size: 16px; font-weight: 600; letter-spacing: 3px; }
-.nm-sidebar-top { gap: 6px; padding-bottom: 4px; }
+.nm-sidebar-top { height:40px; gap:6px; margin-bottom:4px; padding:0 4px 0 0; }
+.nm-sidebar-brand { height:40px; }
+.nm-sidebar-top svg,.nm-sidebar > .nm-action svg { stroke-width:2px; }
 .nm-action,.nm-account,.nm-icon-button,.nm-model-button { background: transparent; box-shadow: none; border: 0; font-weight: 400; }
 .nm-action { min-height: 36px; height: 36px; border-radius: 10px; padding: 0 12px; gap: 10px; font-size: 14px; color: rgba(0,0,0,.72); }
 .nm-action:hover,.nm-account:hover,.nm-icon-button:hover,.nm-model-button:hover,.nm-history-item:hover,.nm-account-menu-item:hover { background: linear-gradient(135deg,rgba(255,255,255,.7),rgba(214,227,251,.5)); box-shadow: none; }
@@ -106,10 +108,12 @@ svg.lucide,svg.lucide :where(path,circle,rect,line,polyline,polygon,ellipse) { s
 .nm-redeem-entry { display: flex; width: 100%; height: 40px; align-items: center; justify-content: center; gap: 8px; margin-top: 6px; border: .5px solid #d3d7e0; border-radius: 999px; background: rgba(255,255,255,.5); font-size: 14px; }
 .nm-redeem-entry:hover { background: rgba(255,255,255,.8); }
 .nm-login-entry { height: 34px; padding: 0 16px; border: .5px solid #d3d7e0; border-radius: 999px; background: rgba(255,255,255,.5); font-size: 12px; font-weight: 500; }
+.nm-sidebar-search { flex-shrink:0; color:rgba(0,0,0,.72); }
 @media (min-width:768px) {
   .nm-layout.is-sidebar-collapsed .nm-redeem-entry { width: 40px; border: 0; background: transparent; }
   .nm-layout.is-sidebar-collapsed .nm-redeem-entry span { display: none; }
   .nm-layout.is-sidebar-collapsed .nm-action { justify-content: center; }
+  .nm-layout.is-sidebar-collapsed .nm-sidebar-search { display:none; }
 }
 @media (max-width:767px) { .nm-redeem-entry { height: 44px; } }
 /* Retain the live model variant label so similarly named models remain distinguishable. */
@@ -196,6 +200,63 @@ svg.lucide,svg.lucide :where(path,circle,rect,line,polyline,polygon,ellipse) { s
 .gg-redeem-panel { margin-top:24px; }
 .gg-settings-mobile-close,.gg-settings-back { display:none; }
 .gg-settings button:focus-visible,.gg-settings a:focus-visible,.gg-web-toggle:focus-visible { outline:2px solid #3e63a5; outline-offset:2px; }
+.gg-action-card { display:grid; gap:16px; margin-top:8px; padding:20px; border-radius:16px; background:rgba(255,255,255,.45); }
+.gg-action-card label,.gg-feedback-form label { display:grid; gap:7px; color:rgba(0,0,0,.66); font-size:12px; font-weight:500; }
+.gg-action-card h3 { font-size:16px; font-weight:600; }
+.gg-action-card > p { color:rgba(0,0,0,.58); font-size:12px; }
+.gg-action-card.is-danger { border:1px solid rgba(163,79,79,.18); background:rgba(255,247,247,.56); }
+.gg-phone-fields { display:grid; grid-template-columns:minmax(150px,.75fr) minmax(0,1.25fr); gap:10px; }
+.gg-form-actions { display:flex; justify-content:flex-end; gap:8px; }
+.gg-delete-button { background:#a34f4f!important; color:white!important; }
+.gg-form-message { margin-top:12px; padding:9px 12px; border-radius:9px; font-size:12px; }
+.gg-form-message.is-success { color:#315f49; background:rgba(224,244,234,.75); }
+.gg-form-message.is-error { color:#8a3f3f; background:rgba(255,232,232,.75); }
+.gg-feedback-panel { padding:4px 2px; }
+.gg-feedback-panel > p:first-child { max-width:46ch; color:rgba(0,0,0,.6); line-height:1.65; }
+.gg-feedback-panel .gg-eyebrow { margin-top:24px; margin-bottom:6px; }
+
+/* Shared legal document: full reading page from login and embedded settings panel. */
+.gg-legal-page { display:flex; flex-direction:column; height:100dvh; overflow:hidden; background:#fff; color:rgba(0,0,0,.9); }
+.gg-legal-page-header { position:sticky; top:0; z-index:10; height:56px; flex-shrink:0; display:flex; align-items:center; justify-content:flex-end; padding:0 32px; background:rgba(255,255,255,.9); backdrop-filter:blur(12px); }
+.gg-legal-close { display:grid; place-items:center; width:36px; height:36px; border-radius:50%; color:rgba(0,0,0,.55); }
+.gg-legal-close:hover { color:rgba(0,0,0,.9); background:rgba(0,0,0,.055); }
+.gg-legal-close:focus-visible { outline:2px solid #7e9fd8; outline-offset:2px; }
+.gg-legal-scroll { min-height:0; flex:1; overflow-y:auto; }
+.gg-legal-document { width:100%; max-width:760px; margin:0 auto; padding:40px 48px 64px; }
+.gg-legal-document > h1 { margin:0; font-size:18px; line-height:28px; font-weight:600; }
+.gg-legal-document > .gg-legal-content { margin-top:20px; }
+.gg-legal-content { max-width:600px; }
+.gg-legal-updated { margin:0; color:rgba(0,0,0,.42); font-size:11px; line-height:16px; }
+.gg-legal-intro { margin:8px 0 0; color:rgba(0,0,0,.58); font-size:14px; line-height:22px; }
+.gg-legal-content section h2 { margin:28px 0 6px; color:rgba(0,0,0,.9); font-size:14px; line-height:22px; font-weight:500; }
+.gg-legal-content section p { margin:0 0 8px; color:rgba(0,0,0,.58); font-size:14px; line-height:22px; }
+.gg-legal-content footer { margin-top:36px; padding-top:16px; border-top:1px solid rgba(0,0,0,.06); color:rgba(0,0,0,.4); font-size:11px; line-height:16px; }
+.gg-legal-content footer a:hover { color:#3e63a5; }
+.gg-settings-content > .gg-legal-content { padding:4px 2px 24px; }
+
+/* Dedicated authentication screen. */
+.gg-login-page { min-height:100dvh; display:grid; place-items:center; padding:32px 20px; background:radial-gradient(circle at 52% 18%,rgba(232,240,255,.84),transparent 38%),linear-gradient(150deg,#f4f6f9,#e9edf4); color:#15171b; }
+.gg-login-back { position:fixed; top:24px; left:24px; display:grid; place-items:center; width:38px; height:38px; border-radius:50%; background:rgba(255,255,255,.52); box-shadow:inset 0 1px rgba(255,255,255,.85); }
+.gg-login-card { width:min(390px,100%); padding:32px; border:1px solid rgba(255,255,255,.82); border-radius:22px; background:linear-gradient(150deg,rgba(255,255,255,.72),rgba(244,247,253,.62)); backdrop-filter:blur(26px) saturate(1.15); box-shadow:0 28px 70px -38px rgba(32,43,65,.48),inset 0 1px rgba(255,255,255,.9); }
+.gg-login-brand { display:flex; justify-content:center; margin-bottom:28px; }
+.gg-login-copy { text-align:center; margin-bottom:28px; }
+.gg-login-copy h1 { font-size:25px; line-height:32px; font-weight:600; }
+.gg-login-copy p { margin-top:7px; color:rgba(0,0,0,.53); font-size:13px; }
+
+/* Conversation search follows the reference modal and mobile full-screen treatment. */
+.gg-search-backdrop { position:fixed; inset:0; z-index:90; display:grid; place-items:start center; padding-top:12vh; background:rgba(35,39,48,.16); backdrop-filter:blur(2px); }
+.gg-search-dialog { width:min(640px,calc(100vw - 48px)); max-height:min(720px,80dvh); display:flex; flex-direction:column; overflow:hidden; border:1px solid rgba(255,255,255,.66); border-radius:20px; background:linear-gradient(150deg,rgba(255,255,255,.92),rgba(252,253,255,.82) 55%,rgba(243,247,253,.66)); box-shadow:var(--gg-shadow),inset -1px -1px 0 rgba(146,169,229,.1); }
+.gg-search-input-wrap { position:sticky; top:0; z-index:1; padding:12px 16px; border-bottom:1px solid rgba(0,0,0,.065); background:rgba(255,255,255,.9); backdrop-filter:blur(8px); }
+.gg-search-input-wrap input { width:100%; height:40px; padding:0 14px; border:1px solid #3e63a5; border-radius:10px; background:#fff; box-shadow:0 0 0 2px rgba(59,130,246,.5); outline:none; font-size:16px; }
+.gg-search-input-wrap input::placeholder { color:rgba(0,0,0,.22); }
+.gg-search-label { padding:8px 12px 6px; color:rgba(0,0,0,.72); font-size:12px; line-height:18px; font-weight:500; }
+.gg-search-results { min-height:120px; overflow:auto; padding:8px; }
+.gg-search-result { width:100%; display:block; padding:12px 12px; border-radius:10px; text-align:left; }
+.gg-search-result.is-selected { background:rgba(220,231,250,.62); }
+.gg-search-result span { display:grid; min-width:0; }
+.gg-search-result strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; line-height:20px; font-weight:400; }
+.gg-search-result small { margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:rgba(0,0,0,.55); font-size:12px; line-height:18px; }
+.gg-search-empty { padding:30px 12px; text-align:center; color:rgba(0,0,0,.45); font-size:13px; }
 @media (max-width:767px) {
   .gg-settings { width:100%; height:100dvh; border:0; border-radius:0; }
   .gg-settings-nav { width:100%; position:relative; }
@@ -213,6 +274,16 @@ svg.lucide,svg.lucide :where(path,circle,rect,line,polyline,polygon,ellipse) { s
   .gg-profile-row:last-child { flex-wrap:wrap; }
   .gg-ledger-row { gap:12px; padding:12px; }
   .nm-model-button { max-width:calc(100vw - 185px); }
+  .gg-phone-fields { grid-template-columns:1fr; }
+  .gg-login-card { padding:26px 22px; }
+  .gg-search-backdrop { padding:0; }
+  .gg-search-dialog { width:100%; height:100dvh; max-height:none; border:0; border-radius:0; }
+  .gg-search-input-wrap { padding-top:env(safe-area-inset-top); height:calc(62px + env(safe-area-inset-top)); }
+  .gg-legal-page-header { padding:0 16px; }
+  .gg-legal-close { width:36px; height:36px; }
+  .gg-legal-document { padding:40px 20px 56px; }
+  .gg-settings-content > .gg-legal-content { padding-top:0; }
+  .gg-settings-content > .gg-legal-content section:first-of-type h2 { margin-top:16px; }
 }
 
 /* Reference navigation uses visible 14px double chevrons in both states. */

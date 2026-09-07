@@ -56,3 +56,35 @@ test("an existing conversation accepts another enabled model; ownership and bala
   assert.equal((await send()).statusCode, 404);
   assert.equal(accepted, undefined);
 });
+
+test("conversation search is scoped to the authenticated user and returns a matching message snippet", async (t) => {
+  const originalFindMany = prisma.conversation.findMany;
+  let receivedWhere: unknown;
+  Reflect.set(prisma.conversation, "findMany", async (input: { where: unknown }) => {
+    receivedWhere = input.where;
+    return [{
+      id: "conversation-1",
+      title: "Launch notes",
+      updatedAt: new Date("2026-09-07T00:00:00.000Z"),
+      messages: [{ content: "The Singapore launch checklist is ready." }]
+    }];
+  });
+  t.after(() => { Reflect.set(prisma.conversation, "findMany", originalFindMany); });
+
+  const app = Fastify();
+  app.decorate("authenticateUser", async (request: { user?: unknown }) => { request.user = { id: "user-1" }; });
+  await app.register(chatRoutes);
+  t.after(() => app.close());
+
+  const response = await app.inject({ method: "GET", url: "/conversations/search?q=Singapore" });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().results[0].snippet, "The Singapore launch checklist is ready.");
+  assert.deepEqual(receivedWhere, {
+    userId: "user-1",
+    deletedAt: null,
+    OR: [
+      { title: { contains: "Singapore", mode: "insensitive" } },
+      { messages: { some: { content: { contains: "Singapore", mode: "insensitive" } } } }
+    ]
+  });
+});

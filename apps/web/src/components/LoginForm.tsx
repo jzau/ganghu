@@ -7,14 +7,14 @@ import { brandText } from "../lib/branding";
 import { localizeErrorMessage, type Language } from "../lib/i18n";
 import { Button } from "./Button";
 
-const supportedCountries = [
+export const supportedCountries = [
   { label: { en: "China mainland", zh: "中国大陆" }, code: "+86", hint: "13800138000", pattern: /^1\d{10}$/ },
   { label: { en: "Hong Kong", zh: "中国香港" }, code: "+852", hint: "51234567", pattern: /^[23569]\d{7}$/ },
   { label: { en: "Japan", zh: "日本" }, code: "+81", hint: "9012345678", pattern: /^\d{9,10}$/ },
   { label: { en: "Australia", zh: "澳大利亚" }, code: "+61", hint: "412345678", pattern: /^\d{9}$/ }
 ] as const;
 
-type CountryCode = (typeof supportedCountries)[number]["code"];
+export type CountryCode = (typeof supportedCountries)[number]["code"];
 
 const loginText = {
   en: {
@@ -28,7 +28,7 @@ const loginText = {
     failedToSendOtp: "Failed to send OTP",
     loginFailed: "Login failed",
     consentPrefix: "By signing up or logging in, you consent to GANGHU AI's",
-    termsOfUse: "Terms of Use",
+    termsOfUse: "Terms of Service",
     privacyPolicy: "Privacy Policy",
     consentJoiner: "and",
     consentSuffix: "New phone numbers will be automatically registered."

@@ -1,9 +1,9 @@
-import { Link } from "react-router-dom";
-import { BrandLockup } from "../components/BrandLockup";
+import { X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { brandText } from "../lib/branding";
 import { useLanguage, type Language } from "../lib/i18n";
 
-type LegalPageKind = "terms" | "privacy";
+export type LegalPageKind = "terms" | "privacy";
 
 const legalText: Record<Language, Record<LegalPageKind, {
   title: string;
@@ -13,8 +13,8 @@ const legalText: Record<Language, Record<LegalPageKind, {
 }>> = {
   en: {
     terms: {
-      title: "Terms of Use",
-      updated: "Last updated: July 8, 2026",
+      title: "Terms of Service",
+      updated: "Last updated: September 7, 2026",
       intro: "These Terms of Use govern your access to and use of GANGHU AI.",
       sections: [
         {
@@ -53,7 +53,7 @@ const legalText: Record<Language, Record<LegalPageKind, {
     },
     privacy: {
       title: "Privacy Policy",
-      updated: "Last updated: July 8, 2026",
+      updated: "Last updated: September 7, 2026",
       intro: "This Privacy Policy explains how GANGHU AI handles information when you use the service.",
       sections: [
         {
@@ -94,7 +94,7 @@ const legalText: Record<Language, Record<LegalPageKind, {
   zh: {
     terms: {
       title: "使用条款",
-      updated: "最后更新：2026 年 7 月 8 日",
+      updated: "最后更新：2026 年 9 月 7 日",
       intro: "本使用条款适用于您访问和使用 GANGHU AI。",
       sections: [
         {
@@ -133,7 +133,7 @@ const legalText: Record<Language, Record<LegalPageKind, {
     },
     privacy: {
       title: "隐私政策",
-      updated: "最后更新：2026 年 7 月 8 日",
+      updated: "最后更新：2026 年 9 月 7 日",
       intro: "本隐私政策说明您使用 GANGHU AI 时，服务如何处理相关信息。",
       sections: [
         {
@@ -175,31 +175,36 @@ const legalText: Record<Language, Record<LegalPageKind, {
 
 export function LegalPage({ kind }: { kind: LegalPageKind }) {
   const { language } = useLanguage();
-  const page = legalText[language][kind];
+  const navigate = useNavigate();
 
   return (
-    <main className="nm-page">
-      <div className="nm-legal-shell">
-        <header className="nm-legal-header">
-          <BrandLockup language={language} />
-          <Link className="nm-legal-home" to="/">
-            {language === "zh" ? "返回应用" : "Back to app"}
-          </Link>
-        </header>
-        <article className="nm-legal-content">
-          <p className="nm-legal-updated">{page.updated}</p>
-          <h1>{page.title}</h1>
-          <p className="nm-legal-intro">{brandText(page.intro, language)}</p>
-          {page.sections.map((section) => (
-            <section key={section.heading}>
-              <h2>{section.heading}</h2>
-              {section.body.map((paragraph) => (
-                <p key={paragraph}>{brandText(paragraph, language)}</p>
-              ))}
-            </section>
-          ))}
+    <div className="gg-legal-page">
+      <header className="gg-legal-page-header">
+        <button className="gg-legal-close" onClick={() => { if (window.history.length > 1) navigate(-1); else navigate("/login"); }} aria-label={language === "en" ? "Close" : "关闭"}><X size={18} /></button>
+      </header>
+      <main className="gg-legal-scroll" id="main-content">
+        <article className="gg-legal-document">
+          <h1>{legalText[language][kind].title}</h1>
+          <LegalContent kind={kind} language={language} />
         </article>
-      </div>
-    </main>
+      </main>
+    </div>
+  );
+}
+
+export function LegalContent({ kind, language }: { kind: LegalPageKind; language: Language }) {
+  const page = legalText[language][kind];
+  return (
+    <div className="gg-legal-content">
+      <p className="gg-legal-updated">{page.updated}</p>
+      <p className="gg-legal-intro">{brandText(page.intro, language)}</p>
+      {page.sections.map((section, index) => (
+        <section key={section.heading}>
+          <h2>{kind === "terms" ? `${index + 1}. ${section.heading}` : section.heading}</h2>
+          {section.body.map((paragraph) => <p key={paragraph}>{brandText(paragraph, language)}</p>)}
+        </section>
+      ))}
+      <footer>GANGRAM · <a href="mailto:support@gangram.com">support@gangram.com</a></footer>
+    </div>
   );
 }

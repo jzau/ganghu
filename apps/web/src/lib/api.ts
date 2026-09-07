@@ -1,4 +1,4 @@
-import type { ApiUser, ConversationDto, ConversationShareDto, LlmModelDto, MessageDto } from "@ai-chat/shared";
+import type { ApiUser, ConversationDto, ConversationSearchResultDto, ConversationShareDto, LlmModelDto, MessageDto } from "@ai-chat/shared";
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
@@ -23,6 +23,7 @@ export const endpoints = {
   updateMe: (input: { displayName: string | null }) => api<{ user: ApiUser }>("/api/me", { method: "PATCH", body: JSON.stringify(input) }),
   models: () => api<{ models: LlmModelDto[] }>("/api/models"),
   conversations: () => api<{ conversations: ConversationDto[] }>("/api/conversations"),
+  searchConversations: (query: string) => api<{ results: ConversationSearchResultDto[] }>(`/api/conversations/search?q=${encodeURIComponent(query)}`),
   messages: (conversationId: string) => api<{ messages: MessageDto[] }>(`/api/conversations/${conversationId}/messages`),
   sharedConversation: (token: string) => api<{ share: ConversationShareDto }>(`/api/shared/${token}`)
 };

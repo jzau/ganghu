@@ -1,7 +1,16 @@
-import { config } from "dotenv";
+import { config, parse } from "dotenv";
+import { readFileSync } from "node:fs";
 import { z } from "zod";
 
 config({ path: new URL("../../../../.env", import.meta.url).pathname });
+
+// Local POC convenience: reuse only service-to-service credentials. Production
+// must receive these values from its own environment or secret manager.
+if (process.env.PAYMENT_SERVICE_ENV_FILE && process.env.NODE_ENV !== "production") {
+  const paymentEnv = parse(readFileSync(process.env.PAYMENT_SERVICE_ENV_FILE));
+  process.env.PAYMENT_SERVICE_INTERNAL_SECRET ||= paymentEnv.INTERNAL_AUTH_SECRET;
+  process.env.PAYMENT_CALLBACK_SECRET ||= paymentEnv.CORE_SERVICE_API_KEY;
+}
 
 const booleanFromEnv = z.preprocess((value) => {
   if (typeof value === "boolean") return value;
@@ -11,6 +20,14 @@ const booleanFromEnv = z.preprocess((value) => {
 
 const schema = z.object({
   DATABASE_URL: z.string().min(1).default("postgresql://postgres:postgres@localhost:5432/ai_chat_app?schema=public"),
+  PAYMENT_SERVICE_ENABLED: booleanFromEnv.default(false),
+  PAYMENT_SERVICE_ENV_FILE: z.string().default(""),
+  PAYMENT_SERVICE_BASE_URL: z.string().default(""),
+  PAYMENT_SERVICE_INTERNAL_SECRET: z.string().default(""),
+  PAYMENT_CALLBACK_SECRET: z.string().default(""),
+  PAYMENT_PUBLIC_API_URL: z.string().default(""),
+  PAYMENT_OFFERS_JSON: z.string().default("[]"),
+  PAYMENT_METHODS_JSON: z.string().default("[]"),
   API_PORT: z.coerce.number().default(4000),
   WEB_ORIGIN: z.string().default("http://localhost:5173"),
   SESSION_SECRET: z.string().min(16).default("dev-session-secret-change-me"),

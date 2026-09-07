@@ -26,4 +26,18 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     const user = await prisma.user.findUniqueOrThrow({ where: { id: request.user!.id } });
     return { appTokenBalance: user.appTokenBalance };
   });
+
+  app.delete("/me", { preHandler: app.authenticateUser }, async (request, reply) => {
+    const userId = request.user!.id;
+    await prisma.$transaction(async (tx) => {
+      await tx.chatUsageRecord.deleteMany({ where: { userId } });
+      await tx.appTokenLedger.deleteMany({ where: { userId } });
+      await tx.redeemCodeRedemption.deleteMany({ where: { userId } });
+      await tx.conversation.deleteMany({ where: { userId } });
+      await tx.userSession.deleteMany({ where: { userId } });
+      await tx.user.delete({ where: { id: userId } });
+    });
+    reply.clearCookie("user_session", { path: "/" });
+    return { ok: true };
+  });
 };

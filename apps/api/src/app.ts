@@ -1,3 +1,4 @@
+import { paymentRoutes } from "./modules/payments/routes.js";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
@@ -32,6 +33,7 @@ export function buildApp() {
   app.register(authRoutes, { prefix: "/api/auth" });
   app.register(userRoutes, { prefix: "/api" });
   app.register(modelRoutes, { prefix: "/api" });
+  app.register(paymentRoutes, { prefix: "/api/payments" });
   app.register(redeemRoutes, { prefix: "/api" });
   app.register(chatRoutes, { prefix: "/api" });
   app.register(adminRoutes, { prefix: "/api/admin" });
