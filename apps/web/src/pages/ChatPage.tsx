@@ -1,6 +1,6 @@
 import type { ApiUser, LlmModelDto, MessageDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Gift, Globe, Menu, ChevronsLeft, ChevronsRight, SquarePen, ArrowUp, Sparkles, Square, Ticket, Trash2, Upload, UserRound, Search } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Copy, Gift, Globe, Menu, ChevronsLeft, ChevronsRight, SquarePen, ArrowUp, Sparkles, Square, Trash2, Upload, UserRound, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useNavigate, useParams } from "react-router-dom";
@@ -29,9 +29,9 @@ const chatText = {
     models: "Models",
     modelCount: (count: number) => `${count} models`,
     startConversation: "Start a conversation",
-    emptyHint: "Choose a model and send a message.",
+    emptyHint: "Ask, explore, and switch between leading AI models in one conversation.",
     thinking: "Assistant is thinking",
-    messagePlaceholder: "Message",
+    messagePlaceholder: "Ask anything. Keep the context, switch the model.",
     sendMessage: "Send message",
     stopResponse: "Stop response",
     redeemCode: "Redeem code",
@@ -44,7 +44,7 @@ const chatText = {
     streamInterrupted: "Response was interrupted. Refreshing conversation.",
     modelLocked: "Model is locked for this conversation",
     signInRequired: "Sign in to continue",
-    guestAccount: "Sign in",
+    guestAccount: "Log in",
     deleteConversationTitle: "Delete conversation?",
     deleteConversationBody: "This conversation will be permanently deleted.",
     cancel: "Cancel",
@@ -89,7 +89,7 @@ const chatText = {
   }
 } as const;
 
-const defaultConversationTitles = new Set<string>([chatText.en.newChat, chatText.zh.newChat]);
+const defaultConversationTitles = new Set<string>(["New chat", chatText.en.newChat, chatText.zh.newChat]);
 
 function conversationTitleForLanguage(title: string, language: Language) {
   return defaultConversationTitles.has(title) ? chatText[language].newChat : title;
@@ -132,6 +132,13 @@ function getModelSubtitle(model: LlmModelDto | undefined, language: Language) {
 function getModelDisplayName(model: LlmModelDto | undefined, language: Language) {
   if (!model) return undefined;
   return language === "zh" ? model.displayNameZh?.trim() || model.displayName : model.displayName;
+}
+
+function getModelTriggerName(model: LlmModelDto | undefined, language: Language) {
+  const name = getModelDisplayName(model, language);
+  const variant = getModelSubtitle(model, language);
+  if (!name || !variant) return name || variant;
+  return variant.toLowerCase().startsWith(name.toLowerCase()) ? variant : `${name} ${variant}`;
 }
 
 function getModelGroupKey(model: LlmModelDto) {
@@ -194,6 +201,7 @@ export function ChatPage() {
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const composingMessageRef = useRef(false);
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const sendInFlightRef = useRef(false);
   const streamAbortControllerRef = useRef<AbortController | null>(null);
   const stopRequestedRef = useRef(false);
@@ -205,6 +213,20 @@ export function ChatPage() {
   const [activeConversationId, setActiveConversationId] = useState<string>(routeConversationId);
   const activeConversationIdRef = useRef(routeConversationId);
   const [draft, setDraft] = useState("");
+  useEffect(() => {
+    const input = composerInputRef.current;
+    if (!input) return;
+    const resize = () => {
+      input.style.height = "0px";
+      const maxHeight = window.innerWidth < 768 ? 138 : 178;
+      const contentHeight = input.scrollHeight;
+      input.style.height = `${Math.min(Math.max(contentHeight, 40), maxHeight)}px`;
+      input.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, [draft, language]);
   const [modelId, setModelId] = useState("");
   const [webSearch, setWebSearch] = useState(false);
   const initializedModelConversation = useRef<string | null>(null);
@@ -219,7 +241,6 @@ export function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
-  const [openModelGroupKey, setOpenModelGroupKey] = useState<string | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(() => new URLSearchParams(window.location.search).has("payment"));
   const [scrollingAreas, setScrollingAreas] = useState<Record<string, boolean>>({});
   const [searchDialogOpen, setSearchDialogOpen] = useState(false);
@@ -362,13 +383,8 @@ export function ChatPage() {
   useEffect(() => {
     if (modelSelectionLocked) {
       setModelMenuOpen(false);
-      setOpenModelGroupKey(null);
     }
   }, [modelSelectionLocked]);
-
-  useEffect(() => {
-    if (!modelMenuOpen) setOpenModelGroupKey(null);
-  }, [modelMenuOpen]);
 
   useEffect(() => {
     if (!accountMenuOpen && !modelMenuOpen && !revealedDeleteConversationId) return;
@@ -381,7 +397,6 @@ export function ChatPage() {
       setAccountMenuOpen(false);
       setAccountMenuView("main");
       setModelMenuOpen(false);
-      setOpenModelGroupKey(null);
       setRevealedDeleteConversationId(null);
     }
 
@@ -536,7 +551,6 @@ export function ChatPage() {
     setCompletedAssistantMessage(null);
     setStreamingText("");
     setModelMenuOpen(false);
-    setOpenModelGroupKey(null);
     setRevealedDeleteConversationId(null);
     navigate("/");
   }
@@ -665,7 +679,7 @@ export function ChatPage() {
             <div className="nm-account-anchor relative" ref={accountMenuRef}>
               <button
                 className={`nm-account ${accountMenuOpen ? "is-open" : ""}`}
-                aria-label={t.openAccountMenu}
+                aria-label={isAuthenticated ? t.openAccountMenu : t.guestAccount}
                 onClick={() => {
                   if (!requireAuth()) return;
                   if (accountMenuOpen) setAccountMenuView("main");
@@ -673,12 +687,12 @@ export function ChatPage() {
                 }}
               >
                 <div className="nm-avatar-sm" aria-hidden="true">
-                  <UserRound size={18} />
+                  <UserRound size={14} />
                 </div>
                 <div className="nm-account-label min-w-0 flex-1 text-left">
                   <div className="truncate text-sm font-bold">{isAuthenticated ? `${balance.toLocaleString()} ${common.tokens}` : t.guestAccount}</div>
                 </div>
-                <Menu size={15} className="nm-account-menu-icon shrink-0 opacity-50" />
+                {isAuthenticated && <Menu size={15} className="nm-account-menu-icon shrink-0 opacity-50" />}
               </button>
               <button
                 className="nm-redeem-entry"
@@ -754,7 +768,7 @@ export function ChatPage() {
               )}
             </header>
 
-            <div className={`nm-messages ${scrollingAreas.messages ? "is-scrolling" : ""}`} onScroll={() => markScrolling("messages")}>
+            <div className={`nm-messages ${allMessages.length === 0 ? "is-empty" : ""} ${scrollingAreas.messages ? "is-scrolling" : ""}`} onScroll={() => markScrolling("messages")}>
               <div className="nm-message-column">
                 {allMessages.length === 0 && (
                   <div className="nm-empty">
@@ -768,6 +782,10 @@ export function ChatPage() {
                     <div className="nm-bubble">
                       <MessageContent message={message} />
                     </div>
+                    <div className="gg-message-meta">
+                      {message.role === "assistant" && <span>{language === "en" ? "Answered by" : "回答模型"} {getModelSubtitle(models.data?.models.find((model) => model.id === message.modelId), language) ?? getModelDisplayName(models.data?.models.find((model) => model.id === message.modelId), language) ?? "AI"}</span>}
+                      <button type="button" onClick={() => void navigator.clipboard?.writeText(message.content)} aria-label={message.role === "user" ? "Copy message" : "Copy answer"} title={message.role === "user" ? "Copy message" : "Copy answer"}><Copy size={14} /></button>
+                    </div>
                   </div>
                 ))}
                 {isActiveConversationSending && !streamingText && !completedAssistantMessage && (
@@ -779,6 +797,7 @@ export function ChatPage() {
                     </div>
                   </div>
                 )}
+                {allMessages.length > 0 && <p className="gg-chat-disclaimer">Gangram can make mistakes. Check important info.</p>}
                 <div ref={messagesEndRef} aria-hidden="true" />
               </div>
             </div>
@@ -786,6 +805,9 @@ export function ChatPage() {
             <footer className="nm-composer-wrap">
               <div className="nm-composer">
                 <textarea
+                  ref={composerInputRef}
+                  rows={1}
+                  aria-label={language === "en" ? "Message" : "消息"}
                   className="nm-input"
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
@@ -816,14 +838,12 @@ export function ChatPage() {
                   disabled={modelSelectionLocked}
                   title={modelSelectionLocked ? undefined : t.selectModel}
                 >
-                  <ModelLogo model={selectedModel} />
-                  <span className="min-w-0 text-left">
-                    <span className="block truncate text-sm font-bold">{getModelDisplayName(selectedModel, language) ?? t.selectModel}</span>
-                    <span className="block truncate text-[11px] text-[#808080]">
-                      {getModelSubtitle(selectedModel, language) ?? t.modelsLoading}
-                    </span>
-                  </span>
-                  {!modelSelectionLocked && <ChevronDown size={15} className="shrink-0 opacity-50" />}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" className="composer-control-icon shrink-0" aria-hidden="true">
+                    <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z" />
+                    <path d="M20 3v4M22 5h-4" />
+                  </svg>
+                  <span className="min-w-0 truncate text-left text-sm font-medium">{getModelTriggerName(selectedModel, language) ?? t.selectModel}</span>
+                  {!modelSelectionLocked && <ChevronDown size={12} className="shrink-0 opacity-50" />}
                 </button>
                 {modelMenuOpen && !modelSelectionLocked && (
                   <div
@@ -832,14 +852,7 @@ export function ChatPage() {
                     aria-label={t.models}
                     onScroll={() => markScrolling("modelMenu")}
                   >
-                    <div className="nm-section-label px-2">{t.models}</div>
-                    {modelGroups.map((group) => {
-                      const groupIsActive = group.models.some((model) => model.id === modelId);
-                      const activeGroupModel = group.models.find((model) => model.id === modelId);
-
-                      if (group.models.length === 1) {
-                        const model = group.models[0];
-                        return (
+                    {modelGroups.flatMap((group) => group.models).map((model) => (
                           <button
                             key={model.id}
                             className={`nm-model-option ${model.id === modelId ? "is-active" : ""}`}
@@ -850,75 +863,13 @@ export function ChatPage() {
                               setModelMenuOpen(false);
                             }}
                           >
-                            <ModelLogo model={model} size="sm" />
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate font-bold">{getModelDisplayName(model, language)}</span>
+                              <span className="block truncate font-medium">{getModelDisplayName(model, language)}</span>
                               <span className="block truncate text-[11px] text-[#808080]">{getModelSubtitle(model, language)}</span>
                             </span>
+                            {model.id === modelId && <Check size={15} />}
                           </button>
-                        );
-                      }
-
-                      const groupIsOpen = openModelGroupKey === group.key;
-                      const representativeModel = activeGroupModel ?? group.models[0];
-                      return (
-                        <div
-                          key={group.key}
-                          className={`nm-model-group ${groupIsOpen ? "is-open" : ""}`}
-                          onPointerEnter={(event) => {
-                            if (event.pointerType === "mouse") setOpenModelGroupKey(group.key);
-                          }}
-                          onPointerLeave={(event) => {
-                            if (event.pointerType === "mouse") setOpenModelGroupKey(null);
-                          }}
-                        >
-                          <button
-                            className={`nm-model-option nm-model-group-trigger ${groupIsActive ? "is-active" : ""}`}
-                            role="menuitem"
-                            aria-haspopup="menu"
-                            aria-expanded={groupIsOpen}
-                            onFocus={() => setOpenModelGroupKey(group.key)}
-                            onClick={() => {
-                              setModelId(group.models[0].id);
-                              setOpenModelGroupKey(group.key);
-                            }}
-                          >
-                            <ModelLogo model={representativeModel} size="sm" />
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate font-bold">{getModelDisplayName(group.models[0], language)}</span>
-                              <span className="block truncate text-[11px] text-[#808080]">
-                                {activeGroupModel ? getModelSubtitle(activeGroupModel, language) : t.modelCount(group.models.length)}
-                              </span>
-                            </span>
-                            <ChevronRight size={17} className="nm-model-group-chevron" />
-                          </button>
-
-                          {groupIsOpen && (
-                            <div className="nm-model-submenu" role="menu" aria-label={getModelDisplayName(group.models[0], language)}>
-                              {group.models.map((model) => {
-                                const subtitle = getModelSubtitle(model, language);
-                                const isActiveModel = model.id === modelId;
-                                return (
-                                  <button
-                                    key={model.id}
-                                    className={`nm-model-submenu-option ${isActiveModel ? "is-active" : ""}`}
-                                    role="menuitemradio"
-                                    aria-checked={isActiveModel}
-                                    onClick={() => {
-                                      setModelId(model.id);
-                                      setOpenModelGroupKey(null);
-                                      setModelMenuOpen(false);
-                                    }}
-                                  >
-                                    <span className="min-w-0 flex-1 truncate font-bold">{subtitle}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    ))}
                   </div>
                 )}
               </div>
@@ -1027,11 +978,11 @@ function RedeemCodeMenu({ language }: { language: Language }) {
         redeem();
       }}
     >
-      <div className="nm-account-redeem-title">
-        <Ticket size={16} />
-        <span>{t.redeemCode}</span>
-      </div>
+      <label className="nm-account-redeem-title" htmlFor="redeem-gift-code">
+        {language === "en" ? "Redeem gift card" : "兑换礼品卡"}
+      </label>
       <input
+        id="redeem-gift-code"
         className="nm-field"
         value={code}
         onChange={(event) => setCode(event.target.value)}
@@ -1040,10 +991,12 @@ function RedeemCodeMenu({ language }: { language: Language }) {
           event.preventDefault();
           redeem();
         }}
-        placeholder={t.code}
+        placeholder="TK  XXXX  XXXX  XXXX  XX"
+        autoComplete="off"
+        spellCheck={false}
       />
       {message && <p className={`nm-account-redeem-message ${messageKind === "success" ? "is-success" : "is-error"}`}>{message}</p>}
-      <Button className="h-9 w-full rounded-[10px] text-xs" type="submit" disabled={!code.trim() || redeemMutation.isPending}>
+      <Button className="nm-account-redeem-submit w-full" type="submit" disabled={!code.trim() || redeemMutation.isPending}>
         {redeemMutation.isPending ? <span className="nm-button-spinner" aria-hidden="true" /> : common.redeem}
       </Button>
     </form>
