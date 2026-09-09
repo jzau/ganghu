@@ -965,7 +965,7 @@ function RedeemCodeMenu({ language }: { language: Language }) {
   });
 
   function redeem() {
-    const redeemCode = code.trim();
+    const redeemCode = code.replace(/\s/g, "").trim();
     if (!redeemCode || redeemMutation.isPending) return;
     redeemMutation.mutate(redeemCode);
   }
@@ -981,20 +981,26 @@ function RedeemCodeMenu({ language }: { language: Language }) {
       <label className="nm-account-redeem-title" htmlFor="redeem-gift-code">
         {language === "en" ? "Redeem gift card" : "兑换礼品卡"}
       </label>
-      <input
-        id="redeem-gift-code"
-        className="nm-field"
-        value={code}
-        onChange={(event) => setCode(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter") return;
-          event.preventDefault();
-          redeem();
-        }}
-        placeholder="TK  XXXX  XXXX  XXXX  XX"
-        autoComplete="off"
-        spellCheck={false}
-      />
+      <div className="gg-redeem-code-input">
+        <span aria-hidden="true">TK</span>
+        <input
+          id="redeem-gift-code"
+          className="nm-field"
+          value={code}
+          onChange={(event) => {
+            const body = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+            setCode(body.match(/.{1,4}/g)?.join(" ") ?? "");
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            redeem();
+          }}
+          placeholder="XXXX  XXXX  XXXX  XX"
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </div>
       {message && <p className={`nm-account-redeem-message ${messageKind === "success" ? "is-success" : "is-error"}`}>{message}</p>}
       <Button className="nm-account-redeem-submit w-full" type="submit" disabled={!code.trim() || redeemMutation.isPending}>
         {redeemMutation.isPending ? <span className="nm-button-spinner" aria-hidden="true" /> : common.redeem}
