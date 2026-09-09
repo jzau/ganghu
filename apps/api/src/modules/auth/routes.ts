@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
@@ -14,7 +15,41 @@ const phoneSchema = z.object({
   phoneNumber: z.string().min(4).max(32)
 });
 const verifySchema = phoneSchema.extend({ otp: z.string().min(4).max(12) });
+const phoneChangeTokenSchema = z.string().min(32).max(1024);
+const currentPhoneVerifySchema = z.object({ otp: z.string().min(4).max(12) });
+const phoneChangeRequestSchema = phoneSchema.extend({ verificationToken: phoneChangeTokenSchema });
+const phoneChangeVerifySchema = verifySchema.extend({ verificationToken: phoneChangeTokenSchema });
 const sessionDays = 30;
+const phoneChangeVerificationMinutes = 10;
+
+type PhoneChangeVerification = {
+  userId: string;
+  currentPhoneNumber: string;
+  stage: "current" | "new";
+  newPhoneNumber?: string;
+  expiresAt: number;
+};
+
+function signPhoneChangeVerification(verification: PhoneChangeVerification) {
+  const payload = Buffer.from(JSON.stringify(verification)).toString("base64url");
+  const signature = createHmac("sha256", env.SESSION_SECRET).update(payload).digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+function getPhoneChangeVerification(token: string, userId: string, currentPhoneNumber: string) {
+  try {
+    const [payload, suppliedSignature, extra] = token.split(".");
+    if (!payload || !suppliedSignature || extra) return null;
+    const expectedSignature = createHmac("sha256", env.SESSION_SECRET).update(payload).digest();
+    const suppliedSignatureBytes = Buffer.from(suppliedSignature, "base64url");
+    if (expectedSignature.length !== suppliedSignatureBytes.length || !timingSafeEqual(expectedSignature, suppliedSignatureBytes)) return null;
+    const verification = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as PhoneChangeVerification;
+    if (verification.expiresAt <= Date.now() || verification.userId !== userId || verification.currentPhoneNumber !== currentPhoneNumber) return null;
+    return verification;
+  } catch {
+    return null;
+  }
+}
 
 function normalizePhone(input: z.infer<typeof phoneSchema>) {
   const rawCountryCode = input.countryCode;
@@ -138,8 +173,48 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     return { user: toUserDto(user), token };
   });
 
+  app.post("/phone-change/current/otp/request", { preHandler: app.authenticateUser }, async (request, reply) => {
+    const currentUser = await prisma.user.findUniqueOrThrow({ where: { id: request.user!.id } });
+    if (env.AUTH_SERVICE_ENABLED) {
+      try {
+        await authServiceClient.requestOtp(currentUser.phoneNumber);
+      } catch (error) {
+        request.log.error({ err: error }, "Failed to request current-phone OTP");
+        return reply.code(503).send({ message: "Authentication service unavailable" });
+      }
+    }
+    return { ok: true, message: env.AUTH_SERVICE_ENABLED ? "OTP sent successfully" : "Mock OTP sent. Use 000000 in development." };
+  });
+
+  app.post("/phone-change/current/otp/verify", { preHandler: app.authenticateUser }, async (request, reply) => {
+    const parsedInput = currentPhoneVerifySchema.safeParse(request.body);
+    if (!parsedInput.success) return reply.code(400).send({ message: "Invalid OTP" });
+    const currentUser = await prisma.user.findUniqueOrThrow({ where: { id: request.user!.id } });
+    const authTestOtp = env.AUTH_TEST_OTP.trim();
+    const isAuthTestOtp = authTestOtp.length > 0 && parsedInput.data.otp.trim() === authTestOtp;
+    if (!isAuthTestOtp && env.AUTH_SERVICE_ENABLED) {
+      try {
+        await authServiceClient.verifyOtp(currentUser.phoneNumber, parsedInput.data.otp);
+      } catch (error) {
+        if (error instanceof AuthServiceError && error.statusCode === 401) return reply.code(401).send({ message: "Invalid OTP" });
+        request.log.error({ err: error }, "Failed to verify current-phone OTP");
+        return reply.code(503).send({ message: "Authentication service unavailable" });
+      }
+    } else if (!isAuthTestOtp && parsedInput.data.otp !== "000000") {
+      return reply.code(401).send({ message: "Invalid OTP" });
+    }
+
+    const verificationToken = signPhoneChangeVerification({
+      userId: currentUser.id,
+      currentPhoneNumber: currentUser.phoneNumber,
+      stage: "current",
+      expiresAt: Date.now() + phoneChangeVerificationMinutes * 60 * 1000
+    });
+    return { verificationToken, expiresInSeconds: phoneChangeVerificationMinutes * 60 };
+  });
+
   app.post("/phone-change/otp/request", { preHandler: app.authenticateUser }, async (request, reply) => {
-    const parsedInput = phoneSchema.safeParse(request.body);
+    const parsedInput = phoneChangeRequestSchema.safeParse(request.body);
     if (!parsedInput.success) return reply.code(400).send({ message: "Invalid phone number" });
     let phoneNumber: string;
     try {
@@ -151,6 +226,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       prisma.user.findUniqueOrThrow({ where: { id: request.user!.id } }),
       prisma.user.findUnique({ where: { phoneNumber } })
     ]);
+    const proof = getPhoneChangeVerification(parsedInput.data.verificationToken, currentUser.id, currentUser.phoneNumber);
+    if (!proof || proof.stage !== "current") return reply.code(403).send({ message: "Verify your current phone number first" });
     if (phoneNumber === currentUser.phoneNumber) return reply.code(400).send({ message: "This phone number is already linked to your account" });
     if (existingUser) return reply.code(409).send({ message: "This phone number is already in use" });
     if (env.AUTH_SERVICE_ENABLED) {
@@ -161,11 +238,12 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(503).send({ message: "Authentication service unavailable" });
       }
     }
-    return { ok: true, message: env.AUTH_SERVICE_ENABLED ? "OTP sent successfully" : "Mock OTP sent. Use 000000 in development." };
+    const verificationToken = signPhoneChangeVerification({ ...proof, stage: "new", newPhoneNumber: phoneNumber });
+    return { ok: true, verificationToken, message: env.AUTH_SERVICE_ENABLED ? "OTP sent successfully" : "Mock OTP sent. Use 000000 in development." };
   });
 
   app.post("/phone-change/otp/verify", { preHandler: app.authenticateUser }, async (request, reply) => {
-    const parsedInput = verifySchema.safeParse(request.body);
+    const parsedInput = phoneChangeVerifySchema.safeParse(request.body);
     if (!parsedInput.success) return reply.code(400).send({ message: "Invalid phone number or OTP" });
     let phoneNumber: string;
     try {
@@ -174,6 +252,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(400).send({ message: error instanceof Error ? error.message : "Invalid phone number" });
     }
     const currentUser = await prisma.user.findUniqueOrThrow({ where: { id: request.user!.id } });
+    const proof = getPhoneChangeVerification(parsedInput.data.verificationToken, currentUser.id, currentUser.phoneNumber);
+    if (!proof || proof.stage !== "new") return reply.code(403).send({ message: "Verify your current phone number first" });
+    if (proof.newPhoneNumber !== phoneNumber) return reply.code(403).send({ message: "Request a verification code for this new phone number first" });
     if (phoneNumber === currentUser.phoneNumber) return reply.code(400).send({ message: "This phone number is already linked to your account" });
     if (await prisma.user.findUnique({ where: { phoneNumber } })) return reply.code(409).send({ message: "This phone number is already in use" });
 
