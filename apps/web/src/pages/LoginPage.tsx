@@ -1,7 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
 import { useEffect } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { BrandLockup } from "../components/BrandLockup";
 import { LoginForm } from "../components/LoginForm";
 import { endpoints } from "../lib/api";
@@ -22,15 +21,10 @@ export function LoginPage() {
 
   return (
     <main className="gg-login-page">
-      <Link className="gg-login-back" to={returnTo} aria-label={language === "en" ? "Back" : "返回"}>
-        <ArrowLeft size={18} />
-      </Link>
-      <section className="gg-login-card">
+      <div className="gg-login-shell">
         <div className="gg-login-brand"><BrandLockup language={language} /></div>
-        <div className="gg-login-copy">
-          <h1>{language === "en" ? "Welcome back" : "欢迎回来"}</h1>
-          <p>{language === "en" ? "Sign in with your phone number to continue." : "使用手机号登录以继续。"}</p>
-        </div>
+        <p className="gg-login-subtitle">{language === "en" ? "Sign in or create an account with your phone number." : "使用手机号登录或创建账户。"}</p>
+        <section className="gg-login-card">
         <LoginForm
           language={language}
           onSuccess={async () => {
@@ -41,7 +35,9 @@ export function LoginPage() {
             navigate(returnTo, { replace: true });
           }}
         />
-      </section>
+        </section>
+        <p className="gg-login-tagline">One Conversation. Any Model. Any Compute.</p>
+      </div>
     </main>
   );
 }

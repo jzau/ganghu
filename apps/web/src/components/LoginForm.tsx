@@ -1,5 +1,5 @@
 import type { FormEvent, ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
@@ -18,20 +18,20 @@ export type CountryCode = (typeof supportedCountries)[number]["code"];
 
 const loginText = {
   en: {
-    countryRegion: "Country / region",
+    countryRegion: "Country / Region",
     phoneNumber: "Phone number",
     otpSent: "OTP sent to",
-    sendOtp: "Send OTP",
+    sendOtp: "Send code",
     signIn: "Sign in",
     invalidPhone: (country: string) => `Enter a valid ${country} phone number.`,
     invalidOtp: "Enter the verification code.",
     failedToSendOtp: "Failed to send OTP",
     loginFailed: "Login failed",
-    consentPrefix: "By signing up or logging in, you consent to GANGHU AI's",
+    consentPrefix: "By signing up or logging in, you agree to GANGRAM AI’s",
     termsOfUse: "Terms of Service",
     privacyPolicy: "Privacy Policy",
     consentJoiner: "and",
-    consentSuffix: "New phone numbers will be automatically registered."
+    consentSuffix: "New phone numbers are registered automatically."
   },
   zh: {
     countryRegion: "国家 / 地区",
@@ -64,20 +64,22 @@ export function LoginForm({
   const [countryCode, setCountryCode] = useState<CountryCode>("+86");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [otp, setOtp] = useState("");
-  const [step, setStep] = useState<"phone" | "otp">("phone");
   const [error, setError] = useState("");
+  const [sending, setSending] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const timer = window.setTimeout(() => setCountdown((value) => value - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [countdown]);
 
   const country = supportedCountries.find((item) => item.code === countryCode) ?? supportedCountries[0];
   const localPhoneNumber = phoneNumber.replace(/\D/g, "");
-  const fullPhoneNumber = `${countryCode}${localPhoneNumber}`;
-
   function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (step === "phone") {
-      void requestOtp();
-    } else {
-      void verifyOtp();
-    }
+    void verifyOtp();
   }
 
   function validatePhoneNumber() {
@@ -93,13 +95,16 @@ export function LoginForm({
     if (!validatePhoneNumber()) return;
 
     try {
+      setSending(true);
       await api("/api/auth/otp/request", {
         method: "POST",
         body: JSON.stringify({ countryCode, phoneNumber: localPhoneNumber })
       });
-      setStep("otp");
+      setCountdown(60);
     } catch (err) {
       setError(localizeErrorMessage(err, language, t.failedToSendOtp));
+    } finally {
+      setSending(false);
     }
   }
 
@@ -112,6 +117,7 @@ export function LoginForm({
     }
 
     try {
+      setSigningIn(true);
       await api("/api/auth/otp/verify", {
         method: "POST",
         body: JSON.stringify({ countryCode, phoneNumber: localPhoneNumber, otp: otp.trim() })
@@ -119,21 +125,22 @@ export function LoginForm({
       onSuccess();
     } catch (err) {
       setError(localizeErrorMessage(err, language, t.loginFailed));
+    } finally {
+      setSigningIn(false);
     }
   }
 
   return (
-    <form onSubmit={submitLogin}>
+    <form className="gg-login-form" onSubmit={submitLogin}>
       {header}
-      <label className="mb-2 block text-[12.5px] font-medium">{t.countryRegion}</label>
-      <div className="nm-select-wrap mb-5">
+      <div className="gg-login-field-group"><label>{t.countryRegion}</label>
+      <div className="nm-select-wrap">
         <select
           className="nm-field nm-select-field"
           value={countryCode}
           onChange={(event) => {
             setCountryCode(event.target.value as CountryCode);
             setPhoneNumber("");
-            setStep("phone");
             setOtp("");
             setError("");
           }}
@@ -145,10 +152,10 @@ export function LoginForm({
           ))}
         </select>
         <ChevronDown className="nm-select-chevron" size={18} aria-hidden="true" />
-      </div>
-      <label className="mb-2 block text-[12.5px] font-medium">{t.phoneNumber}</label>
-      <div className="mb-5 flex gap-2">
-        <div className="nm-field flex w-20 shrink-0 items-center justify-center px-0 text-[12.5px] font-medium">{countryCode}</div>
+      </div></div>
+      <div className="gg-login-field-group"><label>{t.phoneNumber}</label>
+      <div className="gg-login-phone-row">
+        <div className="nm-field gg-login-prefix">{countryCode}</div>
         <input
           className="nm-field"
           inputMode="tel"
@@ -156,26 +163,27 @@ export function LoginForm({
           value={phoneNumber}
           onChange={(event) => {
             setPhoneNumber(event.target.value);
-            setStep("phone");
-            setOtp("");
             setError("");
           }}
           placeholder={country.hint}
         />
-      </div>
-      {step === "otp" && (
-        <>
-          <label className="mb-2 block text-[12.5px] font-medium">{t.otpSent} {fullPhoneNumber}</label>
+      </div></div>
+      <div className="gg-login-field-group"><label>{language === "en" ? "Verification code" : "验证码"}</label>
+          <div className="gg-login-code-row">
           <input
-            className="nm-field mb-5"
+            aria-label={language === "en" ? "Verification code" : "验证码"}
             inputMode="numeric"
             autoComplete="one-time-code"
+            maxLength={6}
             value={otp}
-            onChange={(event) => setOtp(event.target.value)}
-            placeholder="000000"
+            onChange={(event) => { setOtp(event.target.value.replace(/\D/g, "").slice(0, 6)); setError(""); }}
+            placeholder={language === "en" ? "6-digit code" : "6 位验证码"}
           />
-        </>
-      )}
+          <span aria-hidden />
+          <button type="button" onClick={() => void requestOtp()} disabled={sending || countdown > 0}>
+            {sending ? (language === "en" ? "Sending…" : "发送中…") : countdown > 0 ? `${language === "en" ? "Resend in" : "重新发送"} ${countdown}s` : t.sendOtp}
+          </button>
+          </div></div>
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
       <p className="nm-login-consent">
         {brandText(t.consentPrefix, language)}{" "}
@@ -188,8 +196,8 @@ export function LoginForm({
         </Link>
         . {t.consentSuffix}
       </p>
-      <Button className="w-full !text-[12.5px] !font-medium" type="submit">
-        {step === "phone" ? t.sendOtp : t.signIn}
+      <Button className="gg-login-submit" type="submit" disabled={signingIn}>
+        {signingIn ? (language === "en" ? "Signing in…" : "登录中…") : t.signIn}
       </Button>
     </form>
   );
