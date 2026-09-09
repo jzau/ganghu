@@ -7,21 +7,21 @@ import { Button } from "./Button";
 
 const copy = {
   en: {
-    balance: "Current token balance", tokens: "Tokens", choose: "Choose a recharge", method: "Payment method",
+    balance: "Current credit balance", tokens: "Credits", choose: "Choose a recharge", method: "Payment method",
     total: "Total", pay: "Create payment", open: "Continue to payment", unavailable: "Recharge is not available yet.",
     loading: "Loading…", failed: "Could not connect. Please try again.", history: "Recent recharge orders", empty: "No recharge orders yet.",
     check: "Check status", unknown: "Payment creation could not be confirmed. Contact support with the order ID before trying another payment.",
-    pending: "Waiting for payment", captured: "Payment confirmed · tokens added", canceled: "Canceled or expired",
+    pending: "Waiting for payment", captured: "Payment confirmed · Credits added", canceled: "Canceled or expired",
     refunded: "Refunded", refund_review: "Refund requires support review", creating: "Creating payment…", creation_unknown: "Needs verification",
     hint: "Your balance updates after payment is verified. You can reopen this screen to check an order.",
     omi: "OmiPay converts this USD amount to CNY, including its exchange-rate buffer. Review the final CNY total before paying.",
     retry: "Retry request", unknownError: "Payment status could not be verified. Your order is saved; check again shortly."
   },
   zh: {
-    balance: "当前代币余额", tokens: "代币", choose: "选择充值套餐", method: "支付方式", total: "总计", pay: "创建支付订单",
+    balance: "当前积分余额", tokens: "积分", choose: "选择充值套餐", method: "支付方式", total: "总计", pay: "创建支付订单",
     open: "继续支付", unavailable: "充值暂未开放。", loading: "加载中…", failed: "连接失败，请重试。", history: "近期充值订单", empty: "暂无充值订单。",
     check: "查询状态", unknown: "无法确认支付订单是否已创建。请先提供订单号联系客服，再尝试其他支付。",
-    pending: "等待支付", captured: "支付已确认 · 代币已到账", canceled: "已取消或过期", refunded: "已退款", refund_review: "退款需客服审核",
+    pending: "等待支付", captured: "支付已确认 · 积分已到账", canceled: "已取消或过期", refunded: "已退款", refund_review: "退款需客服审核",
     creating: "正在创建支付…", creation_unknown: "待核实", hint: "支付核实后余额自动更新。您可重新打开此页面查询订单。",
     omi: "OmiPay 会将此美元金额转换为人民币，并包含汇率缓冲。请在付款前核对最终人民币金额。",
     retry: "重试请求", unknownError: "暂时无法核实支付状态。订单已保存，请稍后查询。"
@@ -29,7 +29,7 @@ const copy = {
 };
 
 function money(amountMinor: number, currency: string, language: Language) {
-  return new Intl.NumberFormat(language === "zh" ? "zh-CN" : "en-US", { style: "currency", currency, currencyDisplay: "code" }).format(amountMinor / 100);
+  return new Intl.NumberFormat(language === "zh" ? "zh-CN" : "en-US", { style: "currency", currency, currencyDisplay: "narrowSymbol" }).format(amountMinor / 100);
 }
 
 export function PaymentsPanel({ language, user }: { language: Language; user: ApiUser }) {

@@ -22,10 +22,10 @@ The chatbot calls the existing Callcoin payment service. Gateway credentials and
 
 Production URLs must use HTTPS. Keep the payment service behind authenticated service access; never expose either secret in frontend configuration. On the payment service, enable provider webhook verification and configure the provider's notify URL to the **payment service**, not directly to the chatbot.
 
-The repository includes this POC catalog example (change it if the intended demo pricing differs):
+The repository includes four USD offers priced at 200 Credits per US dollar:
 
 ```dotenv
-PAYMENT_OFFERS_JSON=[{"id":"poc-usd-10","amountMinor":1000,"currency":"USD","appTokenAmount":10000}]
+PAYMENT_OFFERS_JSON=[{"id":"usd-10","amountMinor":1000,"currency":"USD","appTokenAmount":2000},{"id":"usd-20","amountMinor":2000,"currency":"USD","appTokenAmount":4000},{"id":"usd-100","amountMinor":10000,"currency":"USD","appTokenAmount":20000},{"id":"usd-200","amountMinor":20000,"currency":"USD","appTokenAmount":40000}]
 PAYMENT_METHODS_JSON=[{"id":"omipay","label":"OmiPay","labelZh":"OmiPay 扫码支付","provider":"omipay","currencies":["USD"]},{"id":"paypal","label":"PayPal","labelZh":"PayPal","provider":"paypal","currencies":["USD"]}]
 ```
 
