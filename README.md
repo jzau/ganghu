@@ -30,7 +30,7 @@ Gangram is a modular AI chatbot and an upstream AI provider for Toking. Its visi
    npm run dev
    ```
 
-The mock OTP code is `000000`. If `OPENROUTER_API_KEY` is empty, chat returns a local fallback response while still exercising persistence and billing. Configure credentials for Tavily, Alibaba IQS, Baidu Qianfan, Perplexity, and/or Doubao Search to enable provider-independent web search for every configured answer model. `SEARCH_PRIMARY_PROVIDER` sets the initial fallback provider; after the database migration is applied, an administrator can change the active provider at runtime under **Admin → Search Settings** without restarting the API. Search defaults to `auto`; the chat API also accepts `searchMode: "off" | "explicit" | "auto"` when a caller needs an override. Automatic search planning uses `SEARCH_PLANNER_MODEL` (default: `deepseek/deepseek-v4-flash`) through OpenRouter. Set `SEARCH_PLANNER_FALLBACK_MODEL` to retry that model only when the primary planner is rate-limited with HTTP 429.
+The mock OTP code is `000000`. Configure credentials for Tavily, Alibaba IQS, Baidu Qianfan, Perplexity, and/or Doubao Search to enable provider-independent web search for every configured answer model. `SEARCH_PRIMARY_PROVIDER` sets the initial fallback provider; after the database migration is applied, an administrator can change the active provider at runtime under **Admin → Search Settings** without restarting the API. Search defaults to `auto`; the chat API also accepts `searchMode: "off" | "explicit" | "auto"` when a caller needs an override. For connected users, automatic search planning uses the selected model through Toking, just like the final answer request.
 
 ## Toking provider integration
 
@@ -39,6 +39,22 @@ Gangram exposes an OpenAI-compatible provider API for Toking at `GET /v1/models`
 These server-to-server requests use Gangram's enabled model catalog and inference connection, but do not create chatbot conversations, deduct local app tokens, redeem codes, or write to the local usage ledger. Toking remains responsible for customer authentication, reservations, and credit settlement. For the POC, Gangram passes through OpenRouter's reported `usage.cost`; a commercial provider price can replace that behavior later.
 
 Gangram does not need its own public URL as an environment variable because it does not currently generate absolute provider links. The URL is deployment configuration on the Toking side. For production, register Gangram there with `baseUrl` set to `https://gangram.ai/v1` and `apiKey` set to one of Gangram's `TOKING_PROVIDER_API_KEYS`.
+
+## Toking customer integration
+
+Signed-in chatbot users connect to Toking by redeeming a Toking gift card. Configure
+the bootstrap `TOKING_REDEMPTION_API_URL`, a `TOKING_CLIENT_API_KEY` with the
+`gift-cards:redeem` scope, and a dedicated `TOKING_CREDENTIAL_SECRET`.
+
+The chatbot sends its stable local user ID to Toking's
+`POST /v1/client/gift-cards/redeem` endpoint. Toking creates one customer wallet
+on the first redemption and credits later cards to that same wallet. Gangram
+encrypts the returned customer API key at rest, loads the model catalog through
+that key, and sends both search-planning completions and user chat completions
+through the gateway `baseUrl` returned by Toking. The gateway URL is not read
+from environment configuration. Gift cards, balances, and inference
+billing are authoritative in Toking; Gangram does not credit or deduct its local
+app-token balance for this flow.
 
 Search provider values:
 

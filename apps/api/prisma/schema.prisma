@@ -13,12 +13,17 @@ model User {
   displayName        String?                @map("display_name")
   externalAuthUserId String?                @map("external_auth_user_id")
   appTokenBalance    Int                    @default(10000) @map("app_token_balance")
+  tokingCreditAccountId String?              @unique @map("toking_credit_account_id")
+  tokingApiKeyEncrypted String?              @map("toking_api_key_encrypted")
+  tokingApiKeyPrefix String?                 @map("toking_api_key_prefix")
+  tokingBaseUrl      String?                 @map("toking_base_url")
+  tokingBalance      String?                 @map("toking_balance")
   status             UserStatus             @default(active)
   createdAt          DateTime               @default(now()) @map("created_at")
   updatedAt          DateTime               @updatedAt @map("updated_at")
   lastLoginAt        DateTime?              @map("last_login_at")
   sessions           UserSession[]
-  redemptions        RedeemCodeRedemption[]
+  legacyRedemptions  RedeemCodeRedemption[]
   ledgerEntries      AppTokenLedger[]
   conversations      Conversation[]
   paymentOrders      PaymentOrder[]
@@ -80,6 +85,8 @@ model LlmModel {
   @@map("llm_models")
 }
 
+/// Legacy local gift-card data retained for migration safety and historical cleanup.
+/// Gangram no longer creates, validates, or lists these codes.
 model RedeemCode {
   id             String                 @id @default(cuid())
   code           String?                @map("code")
@@ -96,6 +103,7 @@ model RedeemCode {
   @@map("redeem_codes")
 }
 
+/// Legacy redemption history. New redemptions are authoritative in Toking.
 model RedeemCodeRedemption {
   id             String     @id @default(cuid())
   redeemCodeId   String     @map("redeem_code_id")

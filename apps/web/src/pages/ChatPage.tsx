@@ -36,7 +36,7 @@ const chatText = {
     stopResponse: "Stop response",
     redeemCode: "Redeem code",
     code: "Code",
-    addedTokens: (amount: number) => `Added ${amount} app tokens`,
+    addedTokens: (amount: string) => `Added ${formatCreditAmount(amount)} Toking credits`,
     chatFailed: "Chat failed",
     shareConversation: "Share conversation",
     shareCopied: "Share link copied successfully",
@@ -73,7 +73,7 @@ const chatText = {
     stopResponse: "停止回复",
     redeemCode: "兑换码",
     code: "兑换码",
-    addedTokens: (amount: number) => `已添加 ${amount} 个词元`,
+    addedTokens: (amount: string) => `已添加 ${formatCreditAmount(amount)} 个 Toking 积分`,
     chatFailed: "聊天失败",
     shareConversation: "分享对话",
     shareCopied: "分享链接复制成功",
@@ -93,6 +93,10 @@ const defaultConversationTitles = new Set<string>(["New chat", chatText.en.newCh
 
 function conversationTitleForLanguage(title: string, language: Language) {
   return defaultConversationTitles.has(title) ? chatText[language].newChat : title;
+}
+
+function formatCreditAmount(value: string) {
+  try { return BigInt(value).toLocaleString(); } catch { return value; }
 }
 
 function clearTextSelection() {
@@ -247,7 +251,7 @@ export function ChatPage() {
   const [revealedDeleteConversationId, setRevealedDeleteConversationId] = useState<string | null>(null);
 
   const me = useQuery({ queryKey: ["me"], queryFn: endpoints.me, retry: false });
-  const models = useQuery({ queryKey: ["models"], queryFn: endpoints.models });
+  const models = useQuery({ queryKey: ["models"], queryFn: endpoints.models, enabled: me.isSuccess });
   const conversations = useQuery({ queryKey: ["conversations"], queryFn: endpoints.conversations, enabled: me.isSuccess });
   const messages = useQuery({
     queryKey: ["messages", activeConversationId],
@@ -352,7 +356,7 @@ export function ChatPage() {
     }
     return Array.from(groups, ([key, groupModels]) => ({ key, models: groupModels }));
   }, [models.data?.models]);
-  const balance = me.data?.user.appTokenBalance ?? 0;
+  const tokingConnected = me.data?.user.tokingConnected ?? false;
   const phoneNumber = me.data?.user.phoneNumber ?? "";
   const isAuthenticated = me.isSuccess;
   const visibleConversations = isAuthenticated
@@ -690,7 +694,11 @@ export function ChatPage() {
                   <UserRound size={14} />
                 </div>
                 <div className="nm-account-label min-w-0 flex-1 text-left">
-                  <div className="truncate text-sm font-bold">{isAuthenticated ? `${balance.toLocaleString()} ${common.tokens}` : t.guestAccount}</div>
+                  <div className="truncate text-sm font-bold">{isAuthenticated
+                    ? tokingConnected
+                      ? language === "en" ? "Toking connected" : "已连接 Toking"
+                      : language === "en" ? "Toking not connected" : "尚未连接 Toking"
+                    : t.guestAccount}</div>
                 </div>
                 {isAuthenticated && <Menu size={15} className="nm-account-menu-icon shrink-0 opacity-50" />}
               </button>
@@ -948,15 +956,13 @@ function RedeemCodeMenu({ language }: { language: Language }) {
   const [message, setMessage] = useState("");
   const [messageKind, setMessageKind] = useState<"error" | "success">("success");
   const redeemMutation = useMutation({
-    mutationFn: (redeemCode: string) => api<{ appTokenAmount: number; appTokenBalance: number }>("/api/redeem", { method: "POST", body: JSON.stringify({ code: redeemCode }) }),
+    mutationFn: (redeemCode: string) => api<{ credited: string; balanceAfter: string; walletCreated: boolean; connected: true }>("/api/redeem", { method: "POST", body: JSON.stringify({ code: redeemCode }) }),
     onSuccess: (result) => {
       setCode("");
       setMessageKind("success");
-      setMessage(t.addedTokens(result.appTokenAmount));
-      queryClient.setQueryData<{ user: ApiUser }>(["me"], (current) =>
-        current ? { user: { ...current.user, appTokenBalance: result.appTokenBalance } } : current
-      );
-      queryClient.invalidateQueries({ queryKey: ["me"] });
+      setMessage(t.addedTokens(result.credited));
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+      void queryClient.invalidateQueries({ queryKey: ["models"] });
     },
     onError: (error) => {
       setMessageKind("error");
@@ -965,9 +971,9 @@ function RedeemCodeMenu({ language }: { language: Language }) {
   });
 
   function redeem() {
-    const redeemCode = code.replace(/\s/g, "").trim();
-    if (!redeemCode || redeemMutation.isPending) return;
-    redeemMutation.mutate(redeemCode);
+    const redeemCodeBody = code.replace(/\s/g, "").trim().replace(/^TK/i, "");
+    if (!redeemCodeBody || redeemMutation.isPending) return;
+    redeemMutation.mutate(`TK${redeemCodeBody}`);
   }
 
   return (
@@ -988,7 +994,7 @@ function RedeemCodeMenu({ language }: { language: Language }) {
           className="nm-field"
           value={code}
           onChange={(event) => {
-            const body = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+            const body = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^TK/, "").slice(0, 14);
             setCode(body.match(/.{1,4}/g)?.join(" ") ?? "");
           }}
           onKeyDown={(event) => {

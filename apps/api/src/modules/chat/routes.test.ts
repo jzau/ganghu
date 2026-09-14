@@ -2,22 +2,28 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import Fastify from "fastify";
 import { prisma } from "../../lib/prisma.js";
+import { encryptCredential } from "../../lib/crypto.js";
 import { chatRoutes } from "./routes.js";
 
 // Stop at the persistence boundary so these route checks never run inference,
-// change a real balance, or require a database.
-test("an existing conversation accepts another enabled model; ownership and balance checks remain enforced", async (t) => {
+// bill Toking, or require a database.
+test("an existing conversation accepts another Toking model; ownership and connection checks remain enforced", async (t) => {
   function stub(target: object, key: string, replacement: unknown) {
     const original = Reflect.get(target, key);
     Reflect.set(target, key, replacement);
     t.after(() => { Reflect.set(target, key, original); });
   }
-  let balance = 1000;
+  let connected = true;
   let ownsConversation = true;
   let enabledModel = true;
   let accepted: unknown;
-  const model = { id: "model-b", provider: "openrouter", minimumRequiredBalance: 100 };
-  stub(prisma.user, "findUniqueOrThrow", async () => ({ id: "user-1", appTokenBalance: balance }));
+  const model = { id: "model-b", provider: "toking", providerModelId: "gangram/vendor/model", minimumRequiredBalance: 0 };
+  const encryptedKey = encryptCredential("tk_live_test_customer_key");
+  stub(prisma.user, "findUniqueOrThrow", async () => ({
+    id: "user-1",
+    tokingApiKeyEncrypted: connected ? encryptedKey : null,
+    tokingBaseUrl: connected ? "http://localhost:3200/v1" : null
+  }));
   stub(prisma.llmModel, "findFirst", async ({ where }: { where: { id: string; enabled: boolean } }) => {
     assert.equal(where.id, "model-b");
     assert.equal(where.enabled, true);
@@ -48,10 +54,10 @@ test("an existing conversation accepts another enabled model; ownership and bala
   assert.equal((await send()).statusCode, 404);
   assert.equal(accepted, undefined);
   ownsConversation = true;
-  balance = 0;
+  connected = false;
   assert.equal((await send()).statusCode, 402);
   assert.equal(accepted, undefined);
-  balance = 1000;
+  connected = true;
   enabledModel = false;
   assert.equal((await send()).statusCode, 404);
   assert.equal(accepted, undefined);

@@ -88,13 +88,16 @@ const errorText: Record<string, Record<Language, string>> = {
     zh: "对话开始后不能更换模型"
   },
   "Chat failed": { en: "Chat failed", zh: "聊天失败" },
-  "Redeem code could not be applied": { en: "Redeem code could not be applied", zh: "兑换码无法使用" },
-  CODE_NOT_FOUND: { en: "Redeem code was not found", zh: "兑换码不存在" },
-  CODE_DISABLED: { en: "Redeem code is disabled", zh: "兑换码已停用" },
-  CODE_EXPIRED: { en: "Redeem code has expired", zh: "兑换码已过期" },
-  CODE_USED_UP: { en: "Redeem code has been used up", zh: "兑换码已用完" },
-  CODE_ALREADY_REDEEMED: { en: "Redeem code has already been redeemed", zh: "兑换码已兑换过" },
-  REDEEM_FAILED: { en: "Redeem failed", zh: "兑换失败" }
+  gift_card_not_found: { en: "Gift card is invalid", zh: "礼品卡无效" },
+  gift_card_unavailable: { en: "Gift card has already been redeemed or is unavailable", zh: "礼品卡已兑换或不可用" },
+  gift_card_expired: { en: "Gift card has expired", zh: "礼品卡已过期" },
+  TOKING_NOT_CONFIGURED: { en: "Toking redemption is not configured", zh: "尚未配置 Toking 兑换服务" },
+  TOKING_UNAVAILABLE: { en: "Toking is temporarily unavailable. Please try again.", zh: "Toking 暂时不可用，请重试。" },
+  TOKING_INVALID_RESPONSE: { en: "Toking returned an invalid response", zh: "Toking 返回了无效响应" },
+  TOKING_ACCOUNT_MISMATCH: { en: "The Toking account could not be matched", zh: "无法匹配 Toking 账户" },
+  TOKING_CREDENTIAL_RECOVERY_REQUIRED: { en: "The Toking connection needs support to recover its API key", zh: "Toking 连接需要联系客服恢复 API 密钥" },
+  TOKING_CREDENTIAL_INVALID: { en: "The saved Toking connection is unavailable. Contact support.", zh: "已保存的 Toking 连接不可用，请联系客服。" },
+  REDEEM_FAILED: { en: "Gift card redemption failed", zh: "礼品卡兑换失败" }
 };
 
 export function localizeErrorMessage(error: unknown, language: Language, fallback: string) {

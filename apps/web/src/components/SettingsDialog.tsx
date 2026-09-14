@@ -17,6 +17,10 @@ const labels = {
 type Section = "profile" | "credits" | "tokens" | "usage" | "feedback" | "terms" | "privacy" | "language";
 type Props = { language: Language; onLanguageChange: (language: Language) => void; user: ApiUser; initialSection: Section; onClose: () => void; onLogout: () => void | Promise<void>; onAccountDeleted: () => void; redeem: ReactNode };
 
+function formatCredits(value: string) {
+  try { return BigInt(value).toLocaleString(); } catch { return value; }
+}
+
 export function SettingsDialog({ language, onLanguageChange, user, initialSection, onClose, onLogout, onAccountDeleted, redeem }: Props) {
   const t = labels[language];
   const [section, setSection] = useState<Section>(initialSection);
@@ -69,7 +73,20 @@ export function SettingsDialog({ language, onLanguageChange, user, initialSectio
           <div className="gg-settings-content" key={section}>
             {section === "profile" && <ProfilePanel language={language} user={user} onAccountDeleted={onAccountDeleted} />}
             {section === "credits" && <PaymentsPanel language={language} user={user} />}
-    {section === "tokens" && <><Balance label={language === "en" ? "Current Toking balance" : "当前 Toking 余额"} value={user.appTokenBalance.toLocaleString()} unit={language === "en" ? "tokens" : "代币"} /> <div className="gg-redeem-panel">{redeem}</div></>}
+            {section === "tokens" && <>
+              <Balance
+                label={language === "en" ? "Toking connection" : "Toking 连接"}
+                value={!user.tokingConnected
+                  ? (language === "en" ? "Not connected" : "未连接")
+                  : user.tokingBalance === null
+                    ? (language === "en" ? "Connected" : "已连接")
+                    : formatCredits(user.tokingBalance)}
+                unit={!user.tokingConnected || user.tokingBalance === null
+                  ? ""
+                  : (language === "en" ? "credits · last known balance" : "积分 · 最近余额")}
+              />
+              <div className="gg-redeem-panel">{redeem}</div>
+            </>}
             {section === "usage" && <PaymentUsagePanel language={language} userId={user.id} />}
             {section === "language" && <div className="gg-settings-card">{(["en", "zh"] as const).map((value) => <button className="gg-language-row" key={value} aria-pressed={language === value} onClick={() => onLanguageChange(value)}><span>{value === "en" ? "English" : "简体中文"}</span>{language === value && <Check size={16} />}</button>)}</div>}
             {(section === "terms" || section === "privacy") && <LegalContent kind={section} language={language} />}

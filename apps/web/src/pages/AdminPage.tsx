@@ -1,33 +1,16 @@
 import type { ApiUser, LlmModelDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, ChevronDown, Copy, Database, LogOut, Menu, Pencil, Plus, Save, Search, Ticket, Users } from "lucide-react";
+import { Bot, Check, ChevronDown, Database, LogOut, Menu, Pencil, Plus, Save, Search, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "../components/Button";
 import { Modal } from "../components/Modal";
 import { api } from "../lib/api";
 
-type AdminSection = "users" | "redeem-codes" | "models" | "settings";
+type AdminSection = "users" | "models" | "settings";
 type SearchProvider = "tavily" | "aliyun-iqs" | "baidu-qianfan" | "perplexity" | "doubao-search";
 type SearchSettings = {
   provider: SearchProvider;
   configured: Record<SearchProvider, boolean>;
-};
-
-type AdminRedeemCode = {
-  id: string;
-  code: string | null;
-  appTokenAmount: number;
-  usageLimit: number | null;
-  usedCount: number;
-  enabled: boolean;
-  expiresAt: string | null;
-  createdAt: string;
-  redemptions: Array<{
-    id: string;
-    appTokenAmount: number;
-    createdAt: string;
-    user: ApiUser;
-  }>;
 };
 
 function formatDate(value: string | null) {
@@ -51,7 +34,6 @@ export function AdminPage() {
 
   const models = useQuery({ queryKey: ["admin-models"], queryFn: () => api<{ models: LlmModelDto[] }>("/api/admin/models"), enabled: authed });
   const users = useQuery({ queryKey: ["admin-users"], queryFn: () => api<{ users: ApiUser[] }>("/api/admin/users"), enabled: authed });
-  const codes = useQuery({ queryKey: ["admin-codes"], queryFn: () => api<{ codes: AdminRedeemCode[] }>("/api/admin/redeem-codes"), enabled: authed });
   const searchSettings = useQuery({
     queryKey: ["admin-search-settings"],
     queryFn: () => api<SearchSettings>("/api/admin/settings/search"),
@@ -82,7 +64,6 @@ export function AdminPage() {
     await api("/api/admin/logout", { method: "POST" }).catch(() => undefined);
     queryClient.removeQueries({ queryKey: ["admin-models"] });
     queryClient.removeQueries({ queryKey: ["admin-users"] });
-    queryClient.removeQueries({ queryKey: ["admin-codes"] });
     queryClient.removeQueries({ queryKey: ["admin-search-settings"] });
     setAuthState("guest");
   }
@@ -94,9 +75,7 @@ export function AdminPage() {
 
   const sectionTitle = section === "users"
     ? "Users"
-    : section === "redeem-codes"
-      ? "Redeem Codes"
-      : section === "models" ? "Models" : "Settings";
+    : section === "models" ? "Models" : "Settings";
 
   if (authState === "checking") {
     return (
@@ -145,7 +124,6 @@ export function AdminPage() {
 
             <nav className="space-y-2">
               <SidebarButton active={section === "users"} count={users.data?.users.length ?? 0} icon={<Users size={17} />} label="Users" onClick={() => selectSection("users")} />
-              <SidebarButton active={section === "redeem-codes"} count={codes.data?.codes.length ?? 0} icon={<Ticket size={17} />} label="Redeem Codes" onClick={() => selectSection("redeem-codes")} />
               <SidebarButton active={section === "models"} count={models.data?.models.length ?? 0} icon={<Bot size={17} />} label="Models" onClick={() => selectSection("models")} />
               <SidebarButton active={section === "settings"} icon={<Search size={17} />} label="Search Settings" onClick={() => selectSection("settings")} />
             </nav>
@@ -167,7 +145,6 @@ export function AdminPage() {
             </header>
             <div className="nm-admin-content">
               {section === "users" && <UsersTable users={users.data?.users ?? []} />}
-              {section === "redeem-codes" && <RedeemCodesTable codes={codes.data?.codes ?? []} />}
               {section === "models" && <ModelsTable models={models.data?.models ?? []} />}
               {section === "settings" && <SearchSettingsPanel settings={searchSettings.data} />}
             </div>
@@ -295,143 +272,6 @@ function UserDetail({ label, mono = false, value }: { label: string; mono?: bool
       <dt className="text-xs font-extrabold uppercase tracking-[0.08em] text-[#808080]">{label}</dt>
       <dd className={`mt-1 break-words ${mono ? "font-mono text-xs" : "font-semibold"}`}>{value}</dd>
     </div>
-  );
-}
-
-function RedeemCodesTable({ codes }: { codes: AdminRedeemCode[] }) {
-  const [creating, setCreating] = useState(false);
-  const [copiedCodeId, setCopiedCodeId] = useState("");
-
-  async function copyRedeemCode(codeId: string, code: string) {
-    await window.navigator.clipboard?.writeText(code).catch(() => undefined);
-    setCopiedCodeId(codeId);
-    window.setTimeout(() => setCopiedCodeId((current) => current === codeId ? "" : current), 1600);
-  }
-
-  return (
-    <div>
-      <PageHeader
-        action={<Button onClick={() => setCreating(true)}><Plus size={16} /> Create</Button>}
-        subtitle="Generate codes, see usage limits, and audit who used each code."
-        title="Redeem Codes"
-      />
-      {creating && <RedeemCodeModal onClose={() => setCreating(false)} />}
-      <TableShell>
-        <thead>
-          <tr>
-            <Th>ID</Th>
-            <Th>Code</Th>
-            <Th>Amount</Th>
-            <Th>Used</Th>
-            <Th>Enabled</Th>
-            <Th>Expires At</Th>
-            <Th>Created At</Th>
-            <Th>Redemption History</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {codes.map((code) => (
-            <tr key={code.id}>
-              <Td mono>{code.id}</Td>
-              <Td>
-                {code.code ? (
-                  <div className="flex min-w-52 items-center gap-2">
-                    <span className="truncate font-mono text-xs font-extrabold">{code.code}</span>
-                    <Button className="h-9 shrink-0 px-2" variant="secondary" onClick={() => void copyRedeemCode(code.id, code.code!)}>
-                      {copiedCodeId === code.id ? <Check size={15} /> : <Copy size={15} />}
-                      {copiedCodeId === code.id ? "Copied" : "Copy"}
-                    </Button>
-                  </div>
-                ) : (
-                  <span className="text-xs font-semibold text-[#808080]">Unavailable for old code</span>
-                )}
-              </Td>
-              <Td>{code.appTokenAmount.toLocaleString()}</Td>
-              <Td>{code.usedCount}/{code.usageLimit ?? "unlimited"}</Td>
-              <Td>{code.enabled ? "Yes" : "No"}</Td>
-              <Td>{formatDate(code.expiresAt)}</Td>
-              <Td>{formatDate(code.createdAt)}</Td>
-              <Td>
-                {code.redemptions.length === 0 ? (
-                  <span className="text-[#808080]">No redemptions</span>
-                ) : (
-                  <div className="min-w-72 space-y-2">
-                    {code.redemptions.map((redemption) => (
-                      <div key={redemption.id} className="rounded-lg bg-[#ececec] p-2 shadow-nm-in">
-                        <div className="font-extrabold">{redemption.user.phoneNumber}</div>
-                        <div className="text-xs text-[#808080]">{formatDate(redemption.createdAt)} · {redemption.appTokenAmount.toLocaleString()} tokens</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Td>
-            </tr>
-          ))}
-        </tbody>
-      </TableShell>
-    </div>
-  );
-}
-
-function RedeemCodeModal({ onClose }: { onClose: () => void }) {
-  const queryClient = useQueryClient();
-  const [appTokenAmount, setAppTokenAmount] = useState(10000);
-  const [usageLimit, setUsageLimit] = useState(1);
-  const [unlimited, setUnlimited] = useState(false);
-  const [generatedCode, setGeneratedCode] = useState("");
-  const [copied, setCopied] = useState(false);
-
-  async function copyGeneratedCode() {
-    if (!generatedCode) return;
-    await window.navigator.clipboard?.writeText(generatedCode).catch(() => undefined);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
-  }
-
-  const createCode = useMutation({
-    mutationFn: () =>
-      api<{ code: string }>("/api/admin/redeem-codes", {
-        method: "POST",
-        body: JSON.stringify({ appTokenAmount, usageLimit: unlimited ? null : usageLimit })
-      }),
-    onSuccess: (data) => {
-      setGeneratedCode(data.code);
-      queryClient.invalidateQueries({ queryKey: ["admin-codes"] });
-    }
-  });
-
-  return (
-    <Modal title="Create Redeem Code" onClose={onClose}>
-      <div className="space-y-4">
-        <FormField help="How many app tokens the user receives each time this code is redeemed." label="App token amount">
-          <input className="nm-field" min={1} type="number" value={appTokenAmount} onChange={(event) => setAppTokenAmount(Number(event.target.value))} />
-        </FormField>
-        <FormField help="How many total successful redemptions are allowed for this code." label="Usage limit">
-          <input className="nm-field" disabled={unlimited} min={1} type="number" value={usageLimit} onChange={(event) => setUsageLimit(Number(event.target.value))} />
-        </FormField>
-        <label className="flex items-center gap-2 text-sm font-bold">
-          <input checked={unlimited} onChange={(event) => setUnlimited(event.target.checked)} type="checkbox" />
-          Allow unlimited redemptions
-        </label>
-        <Button className="w-full" disabled={createCode.isPending} onClick={() => createCode.mutate()}>
-          <Ticket size={16} /> Generate
-        </Button>
-        {generatedCode && (
-          <div className="rounded-xl bg-[#ececec] p-3 shadow-nm-in">
-            <div className="mb-1 flex items-center gap-2 text-sm font-extrabold">
-              <Check size={16} /> Generated code
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="min-w-0 flex-1 break-all font-mono text-lg font-extrabold">{generatedCode}</div>
-              <Button className="shrink-0" variant="secondary" onClick={() => void copyGeneratedCode()}>
-                {copied ? <Check size={16} /> : <Copy size={16} />}
-                {copied ? "Copied" : "Copy"}
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-    </Modal>
   );
 }
 

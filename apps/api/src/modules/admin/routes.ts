@@ -1,6 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { customAlphabet } from "nanoid";
 import { createSecretToken, hashSecret, verifyPlainText } from "../../lib/crypto.js";
 import { env } from "../../lib/env.js";
 import { toModelDto, toUserDto } from "../../lib/mapper.js";
@@ -62,14 +61,8 @@ const modelPatchSchema = modelBaseSchema.partial().refine((model) => {
   if (model.maxOutputTokens === undefined || model.contextWindowTokens === undefined) return true;
   return model.maxOutputTokens < model.contextWindowTokens;
 }, tokenWindowRefinement);
-const redeemCodeSchema = z.object({
-  appTokenAmount: z.number().int().positive(),
-  usageLimit: z.number().int().positive().nullable().optional().default(1),
-  expiresAt: z.string().datetime().nullable().optional()
-});
 const adjustmentSchema = z.object({ amount: z.number().int(), note: z.string().max(500).optional() });
 const searchSettingsSchema = z.object({ provider: z.enum(searchProviderIds) });
-const alphabet = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 16);
 
 export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.post("/login", async (request, reply) => {
@@ -94,7 +87,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.get("/me", { preHandler: app.authenticateAdmin }, async () => ({ ok: true }));
 
   app.get("/models", { preHandler: app.authenticateAdmin }, async () => {
-    const models = await prisma.llmModel.findMany({ orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }] });
+    const models = await prisma.llmModel.findMany({ where: { provider: "openrouter" }, orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }] });
     return { models: models.map((model) => toModelDto(model)) };
   });
 
@@ -134,52 +127,6 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const params = z.object({ id: z.string() }).parse(request.params);
     const model = await prisma.llmModel.update({ where: { id: params.id }, data: { enabled: false } });
     return { model: toModelDto(model) };
-  });
-
-  app.get("/redeem-codes", { preHandler: app.authenticateAdmin }, async () => {
-    const codes = await prisma.redeemCode.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 100,
-      include: {
-        redemptions: {
-          orderBy: { createdAt: "desc" },
-          include: { user: true }
-        }
-      }
-    });
-    return {
-      codes: codes.map((code) => ({
-        id: code.id,
-        code: code.code,
-        appTokenAmount: code.appTokenAmount,
-        usageLimit: code.usageLimit,
-        usedCount: code.usedCount,
-        enabled: code.enabled,
-        expiresAt: code.expiresAt,
-        createdAt: code.createdAt,
-        redemptions: code.redemptions.map((redemption) => ({
-          id: redemption.id,
-          appTokenAmount: redemption.appTokenAmount,
-          createdAt: redemption.createdAt,
-          user: toUserDto(redemption.user)
-        }))
-      }))
-    };
-  });
-
-  app.post("/redeem-codes", { preHandler: app.authenticateAdmin }, async (request) => {
-    const input = redeemCodeSchema.parse(request.body);
-    const code = alphabet();
-    const redeemCode = await prisma.redeemCode.create({
-      data: {
-        code,
-        codeHash: hashSecret(code),
-        appTokenAmount: input.appTokenAmount,
-        usageLimit: input.usageLimit,
-        expiresAt: input.expiresAt ? new Date(input.expiresAt) : null
-      }
-    });
-    return { code, redeemCode };
   });
 
   app.get("/users", { preHandler: app.authenticateAdmin }, async () => {

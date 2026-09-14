@@ -32,6 +32,8 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     await prisma.$transaction(async (tx) => {
       await tx.chatUsageRecord.deleteMany({ where: { userId } });
       await tx.appTokenLedger.deleteMany({ where: { userId } });
+      // Historical local redemptions predate the Toking integration and retain
+      // a restrictive foreign key, so they must be cleared during deletion.
       await tx.redeemCodeRedemption.deleteMany({ where: { userId } });
       await tx.conversation.deleteMany({ where: { userId } });
       await tx.userSession.deleteMany({ where: { userId } });

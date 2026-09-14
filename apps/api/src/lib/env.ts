@@ -19,6 +19,7 @@ const booleanFromEnv = z.preprocess((value) => {
 }, z.boolean());
 
 const schema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   DATABASE_URL: z.string().min(1).default("postgresql://postgres:postgres@localhost:5432/ai_chat_app?schema=public"),
   PAYMENT_SERVICE_ENABLED: booleanFromEnv.default(false),
   PAYMENT_SERVICE_ENV_FILE: z.string().default(""),
@@ -43,6 +44,9 @@ const schema = z.object({
   OPENROUTER_APP_NAME: z.string().optional().default("GANGHU AI"),
   TOKING_PROVIDER_API_KEYS: z.string().optional().default(""),
   TOKING_PROVIDER_CONTRACT_VERSION: z.literal("1").default("1"),
+  TOKING_REDEMPTION_API_URL: z.string().url().default("http://localhost:3100/v1/client/gift-cards/redeem"),
+  TOKING_CLIENT_API_KEY: z.string().optional().default(""),
+  TOKING_CREDENTIAL_SECRET: z.string().min(16).default(process.env.SESSION_SECRET ?? "dev-session-secret-change-me"),
   TAVILY_API_KEY: z.string().optional().default(""),
   TAVILY_BASE_URL: z.string().url().default("https://api.tavily.com"),
   ALIYUN_IQS_API_KEY: z.string().optional().default(""),

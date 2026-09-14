@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { env } from "../../lib/env.js";
-import { completeOpenRouterStructured, OpenRouterError } from "../llm/openrouter.js";
+import { completeOpenRouterStructured, OpenRouterError, type OpenAiConnection } from "../llm/openrouter.js";
 import { planAutomaticSearch, type AutoSearchPlan, type SearchCategory, type SearchConversationMessage } from "./search-service.js";
 
 const plannerDecisionSchema = z.object({
@@ -67,6 +67,8 @@ export async function planSearchAutomatically(input: {
   recentMessages?: SearchConversationMessage[];
   signal: AbortSignal;
   deadline: number;
+  connection?: OpenAiConnection;
+  plannerModel?: string;
 }): Promise<SearchPlannerExecution> {
   const startedAt = Date.now();
   const deterministicPlan = planAutomaticSearch(input);
@@ -86,7 +88,7 @@ export async function planSearchAutomatically(input: {
       fallbackReason: "deterministic_current_intent"
     };
   }
-  if (!env.OPENROUTER_API_KEY) return ruleFallback(input, startedAt, "openrouter_not_configured");
+  if (!input.connection && !env.OPENROUTER_API_KEY) return ruleFallback(input, startedAt, "openrouter_not_configured");
 
   const remainingMs = input.deadline - Date.now();
   if (remainingMs <= 0) return ruleFallback(input, startedAt, "run_deadline_exceeded");
@@ -96,20 +98,20 @@ export async function planSearchAutomatically(input: {
   const signal = AbortSignal.any([input.signal, timeoutController.signal]);
 
   try {
-    const primaryModel = env.SEARCH_PLANNER_MODEL.trim();
-    const fallbackModel = env.SEARCH_PLANNER_FALLBACK_MODEL.trim();
+    const primaryModel = input.plannerModel?.trim() || env.SEARCH_PLANNER_MODEL.trim();
+    const fallbackModel = input.connection ? "" : env.SEARCH_PLANNER_FALLBACK_MODEL.trim();
     let selectedModel = primaryModel;
     let fallbackReason: string | undefined;
     let result;
 
     try {
-      result = await completePlannerDecision(primaryModel, input, signal);
+      result = await completePlannerDecision(primaryModel, input, signal, input.connection);
     } catch (error) {
       if (!shouldRetryWithFallback(error, primaryModel, fallbackModel, signal)) throw error;
       selectedModel = fallbackModel;
       fallbackReason = "primary_model_rate_limited";
       try {
-        result = await completePlannerDecision(fallbackModel, input, signal);
+        result = await completePlannerDecision(fallbackModel, input, signal, input.connection);
       } catch (fallbackError) {
         const message = fallbackError instanceof Error ? fallbackError.message.slice(0, 160) : "planner_failed";
         throw new Error(`fallback_model_failed_after_primary_429: ${message}`, { cause: fallbackError });
@@ -144,7 +146,8 @@ export async function planSearchAutomatically(input: {
 function completePlannerDecision(
   model: string,
   input: { message: string; recentMessages?: SearchConversationMessage[] },
-  signal: AbortSignal
+  signal: AbortSignal,
+  connection?: OpenAiConnection
 ) {
   return completeOpenRouterStructured({
     model,
@@ -152,7 +155,8 @@ function completePlannerDecision(
     maxTokens: env.SEARCH_PLANNER_MAX_TOKENS,
     schemaName: "search_plan",
     schema: plannerJsonSchema,
-    signal
+    signal,
+    connection
   });
 }
 

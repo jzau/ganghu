@@ -5,6 +5,11 @@ export interface LlmChatMessage {
   content: string;
 }
 
+export interface OpenAiConnection {
+  baseUrl: string;
+  apiKey: string;
+}
+
 export interface StreamResult {
   content: string;
   usage: {
@@ -59,8 +64,9 @@ export async function* streamOpenRouterChat(input: {
   messages: LlmChatMessage[];
   maxTokens: number;
   signal?: AbortSignal;
+  connection?: OpenAiConnection;
 }): AsyncGenerator<{ delta: string }, StreamResult> {
-  if (!env.OPENROUTER_API_KEY) {
+  if (!input.connection && !env.OPENROUTER_API_KEY) {
     const fallback = "OpenRouter is not configured yet. Add OPENROUTER_API_KEY to enable live model responses.";
     yield { delta: fallback };
     return {
@@ -73,7 +79,7 @@ export async function* streamOpenRouterChat(input: {
     };
   }
 
-  if (shouldUseNonStreamingFirst(input.model)) {
+  if (!input.connection && shouldUseNonStreamingFirst(input.model)) {
     const fallback = await completeOpenRouterChat(input);
     yield { delta: fallback.content };
     return fallback;
@@ -107,6 +113,12 @@ export async function* streamOpenRouterChat(input: {
       const payload = trimmed.slice("data:".length).trim();
       if (payload === "[DONE]") continue;
       const parsed = JSON.parse(payload);
+      if (parsed.error) {
+        await reader.cancel().catch(() => undefined);
+        const message = typeof parsed.error.message === "string" ? parsed.error.message : "AI request failed";
+        const status = parsed.error.code === "insufficient_credits" ? 402 : 502;
+        throw new OpenRouterError(`AI request failed with status ${status}`, status, message);
+      }
       generationId = parsed.id ?? generationId;
       const delta = parsed.choices?.[0]?.delta?.content ?? "";
       if (delta) {
@@ -121,6 +133,7 @@ export async function* streamOpenRouterChat(input: {
   }
 
   if (!content.trim() && usage.totalTokens === 0) {
+    if (input.connection) throw new OpenRouterError("Toking returned an empty response", 502);
     const fallback = await completeOpenRouterChat(input);
     yield { delta: fallback.content };
     return fallback;
@@ -152,16 +165,12 @@ export async function completeOpenRouterStructured(input: {
   schemaName: string;
   schema: Record<string, unknown>;
   signal?: AbortSignal;
+  connection?: OpenAiConnection;
 }): Promise<StructuredCompletionResult> {
-  const response = await fetch(`${env.OPENROUTER_BASE_URL}/chat/completions`, {
+  const response = await fetch(`${connectionFor(input).baseUrl}/chat/completions`, {
     method: "POST",
     signal: input.signal,
-    headers: {
-      Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": env.OPENROUTER_SITE_URL,
-      "X-Title": env.OPENROUTER_APP_NAME
-    },
+    headers: connectionHeaders(input.connection),
     body: JSON.stringify({
       model: input.model,
       messages: input.messages,
@@ -220,7 +229,7 @@ function shouldUseNonStreamingFirst(model: string) {
   return nonStreamingFirstModels.has(model);
 }
 
-async function completeOpenRouterChat(input: { model: string; messages: LlmChatMessage[]; maxTokens: number; signal?: AbortSignal }): Promise<StreamResult> {
+async function completeOpenRouterChat(input: { model: string; messages: LlmChatMessage[]; maxTokens: number; signal?: AbortSignal; connection?: OpenAiConnection }): Promise<StreamResult> {
   const response = await requestOpenRouterChat(input, false);
   if (!response.ok) {
     const providerMessage = await readOpenRouterError(response);
@@ -245,16 +254,11 @@ async function completeOpenRouterChat(input: { model: string; messages: LlmChatM
   };
 }
 
-function requestOpenRouterChat(input: { model: string; messages: LlmChatMessage[]; maxTokens: number; signal?: AbortSignal }, stream: boolean) {
-  return fetch(`${env.OPENROUTER_BASE_URL}/chat/completions`, {
+function requestOpenRouterChat(input: { model: string; messages: LlmChatMessage[]; maxTokens: number; signal?: AbortSignal; connection?: OpenAiConnection }, stream: boolean) {
+  return fetch(`${connectionFor(input).baseUrl}/chat/completions`, {
     method: "POST",
     signal: input.signal,
-    headers: {
-      Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": env.OPENROUTER_SITE_URL,
-      "X-Title": env.OPENROUTER_APP_NAME
-    },
+    headers: connectionHeaders(input.connection),
     body: JSON.stringify({
       model: input.model,
       messages: input.messages,
@@ -263,6 +267,18 @@ function requestOpenRouterChat(input: { model: string; messages: LlmChatMessage[
       usage: { include: true }
     })
   });
+}
+
+function connectionFor(input: { connection?: OpenAiConnection }): OpenAiConnection {
+  return input.connection ?? { baseUrl: env.OPENROUTER_BASE_URL.replace(/\/+$/, ""), apiKey: env.OPENROUTER_API_KEY };
+}
+
+function connectionHeaders(connection?: OpenAiConnection) {
+  return {
+    Authorization: `Bearer ${connection?.apiKey ?? env.OPENROUTER_API_KEY}`,
+    "Content-Type": "application/json",
+    ...(!connection ? { "HTTP-Referer": env.OPENROUTER_SITE_URL, "X-Title": env.OPENROUTER_APP_NAME } : {})
+  };
 }
 
 function toUsage(rawUsage?: OpenRouterUsage, fallback = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }) {

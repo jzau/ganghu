@@ -11,6 +11,7 @@ import type { SearchResult } from "../search/contracts.js";
 import { SearchError } from "../search/search-error.js";
 import { planSearchAutomatically } from "../search/search-planner.js";
 import { isPlatformSearchConfigured, resolveSearchMode, searchForMessage, searchForPlan } from "../search/search-service.js";
+import { readTokingConnection, TokingError, tokingHttpStatus } from "../toking/client.js";
 
 const createConversationSchema = z.object({ title: z.string().min(1).max(120).optional() });
 const chatSchema = z.object({
@@ -144,18 +145,26 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     const userId = request.user!.id;
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const model = await prisma.llmModel.findFirst({ where: { id: input.modelId, enabled: true } });
+    let connection: ReturnType<typeof readTokingConnection>;
+    try {
+      connection = readTokingConnection(user);
+    } catch (error) {
+      if (error instanceof TokingError) {
+        return reply.code(tokingHttpStatus(error.status)).send({ code: error.code, message: error.message });
+      }
+      throw error;
+    }
 
     if (!model) return reply.code(404).send({ message: "Model not found" });
-    if (model.provider !== "openrouter") {
-      return reply.code(400).send({ message: "Only OpenRouter models are supported" });
+    if (!connection) {
+      return reply.code(402).send({ code: "TOKING_CONNECTION_REQUIRED", message: "Redeem a Toking gift card before chatting" });
+    }
+    if (model.provider !== "toking") {
+      return reply.code(400).send({ message: "Select a model provided by Toking" });
     }
     if (searchMode === "explicit" && !(await isPlatformSearchConfigured())) {
       return reply.code(503).send({ message: "The active web search provider is not configured correctly." });
     }
-    if (user.appTokenBalance < model.minimumRequiredBalance) {
-      return reply.code(402).send({ message: "Not enough app tokens" });
-    }
-
     const conversation = input.conversationId
       ? await prisma.conversation.findFirst({ where: { id: input.conversationId, userId, deletedAt: null } })
       : await findOrCreateDraftConversation(userId, input.message);
@@ -199,7 +208,9 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         message: input.message,
         recentMessages: conversationMessages,
         signal: streamAbortController.signal,
-        deadline: runDeadline
+        deadline: runDeadline,
+        connection,
+        plannerModel: model.providerModelId
       });
       const autoSearchPlan = plannerExecution.plan;
       request.log.info({
@@ -278,7 +289,8 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         model: model.providerModelId,
         messages: llmMessages,
         maxTokens: model.maxOutputTokens,
-        signal: streamAbortController.signal
+        signal: streamAbortController.signal,
+        connection
       });
 
       let result = await stream.next();
@@ -291,15 +303,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       const assistantMessage = await prisma.message.create({
         data: { conversationId: conversation.id, role: "assistant", content: result.value.content, modelId: model.id }
       });
-      const inputCharge = Math.ceil((result.value.usage.promptTokens / 1000) * model.inputAppTokensPer1k);
-      const outputCharge = Math.ceil((result.value.usage.completionTokens / 1000) * model.outputAppTokensPer1k);
-      const totalCharge = inputCharge + outputCharge;
-
-      const updatedUser = await prisma.$transaction(async (tx) => {
-        const freshUser = await tx.user.findUniqueOrThrow({ where: { id: userId } });
-        const nextBalance = Math.max(0, freshUser.appTokenBalance - totalCharge);
-        const chargedAmount = freshUser.appTokenBalance - nextBalance;
-        const updated = await tx.user.update({ where: { id: userId }, data: { appTokenBalance: nextBalance } });
+      await prisma.$transaction(async (tx) => {
         await tx.chatUsageRecord.create({
           data: {
             userId,
@@ -311,29 +315,17 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
             promptTokens: result.value.usage.promptTokens,
             completionTokens: result.value.usage.completionTokens,
             totalTokens: result.value.usage.totalTokens,
-            inputAppTokensCharged: inputCharge,
-            outputAppTokensCharged: outputCharge,
-            totalAppTokensCharged: totalCharge,
+            inputAppTokensCharged: 0,
+            outputAppTokensCharged: 0,
+            totalAppTokensCharged: 0,
             openrouterGenerationId: result.value.generationId,
             openrouterCost: result.value.cost
-          }
-        });
-        await tx.appTokenLedger.create({
-          data: {
-            userId,
-            type: "chat_usage",
-            amount: -chargedAmount,
-            balanceAfter: nextBalance,
-            sourceType: "message",
-            sourceId: assistantMessage.id,
-            metadata: { requestedCharge: totalCharge }
           }
         });
         await tx.conversation.update({
           where: { id: conversation.id },
           data: { updatedAt: new Date(), title: defaultConversationTitles.has(conversation.title) ? input.message.slice(0, 80) : conversation.title }
         });
-        return updated;
       });
 
       request.log.info({
@@ -346,7 +338,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         prompt_tokens: result.value.usage.promptTokens,
         completion_tokens: result.value.usage.completionTokens,
         total_tokens: result.value.usage.totalTokens,
-        deducted_app_tokens: totalCharge,
+        billing_system: "toking",
         response_time_ms: Date.now() - startedAt
       });
 
@@ -355,8 +347,8 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         sources: searchResults,
         usage: {
           ...result.value.usage,
-          totalAppTokensCharged: totalCharge,
-          updatedBalance: updatedUser.appTokenBalance
+          totalAppTokensCharged: 0,
+          tokingBalance: user.tokingBalance
         }
       });
       reply.raw.end();
@@ -493,8 +485,8 @@ function toChatStreamError(error: unknown) {
   }
   if (error instanceof OpenRouterError) {
     return {
-      code: "OPENROUTER_REQUEST_FAILED",
-      message: friendlyOpenRouterMessage(error)
+      code: error.status === 402 ? "TOKING_INSUFFICIENT_CREDITS" : "TOKING_REQUEST_FAILED",
+      message: friendlyTokingMessage(error)
     };
   }
 
@@ -509,14 +501,15 @@ function friendlySearchMessage(error: SearchError) {
   return "Web search is temporarily unavailable. Please try again.";
 }
 
-function friendlyOpenRouterMessage(error: OpenRouterError) {
+function friendlyTokingMessage(error: OpenRouterError) {
   const providerMessage = error.providerMessage?.replace(/\s+/g, " ").trim();
+  if (error.status === 402) return "Your Toking balance is too low. Redeem another gift card to continue.";
   if (error.status === 429) {
-    return providerMessage ? `OpenRouter provider is rate limited: ${providerMessage}` : "OpenRouter provider is rate limited. Please try again shortly.";
+    return providerMessage ? `Toking is rate limited: ${providerMessage}` : "Toking is rate limited. Please try again shortly.";
   }
   if (error.status >= 500) {
-    return providerMessage ? `OpenRouter provider is temporarily unavailable: ${providerMessage}` : `OpenRouter provider is temporarily unavailable (${error.status}).`;
+    return providerMessage ? `Toking is temporarily unavailable: ${providerMessage}` : `Toking is temporarily unavailable (${error.status}).`;
   }
-  if (providerMessage) return `OpenRouter error: ${providerMessage}`;
-  return `OpenRouter request failed with status ${error.status}`;
+  if (providerMessage) return `Toking error: ${providerMessage}`;
+  return `Toking request failed with status ${error.status}`;
 }

@@ -8,6 +8,9 @@ export interface ApiUser {
   displayName: string | null;
   externalAuthUserId: string | null;
   appTokenBalance: number;
+  tokingConnected: boolean;
+  tokingApiKeyPrefix: string | null;
+  tokingBalance: string | null;
   status: UserStatus;
   createdAt: string;
   updatedAt: string;
@@ -69,7 +72,8 @@ export interface ChatUsageDto {
   completionTokens: number;
   totalTokens: number;
   totalAppTokensCharged: number;
-  updatedBalance: number;
+  updatedBalance?: number;
+  tokingBalance?: string | null;
 }
 
 export type SearchMode = "off" | "explicit" | "auto";
