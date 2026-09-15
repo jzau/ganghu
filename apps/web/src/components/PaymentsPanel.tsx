@@ -145,7 +145,7 @@ interface LedgerRow { id: string; type: string; amount: number; balanceAfter: nu
 interface TokingHistoryRow { id: string; type: string; amount: string; model: string | null; createdAt: string }
 interface TokingHistoryPage { data: TokingHistoryRow[]; nextCursor: string | null }
 
-export function PaymentUsagePanel({ language, userId }: { language: Language; userId: string }) {
+export function PaymentUsagePanel({ language, userId, tokingConnected }: { language: Language; userId: string; tokingConnected: boolean }) {
   const [tab, setTab] = useState<"balance" | "toking">("balance");
   const ledger = useQuery({
     queryKey: ["payment-ledger", userId],
@@ -161,7 +161,7 @@ export function PaymentUsagePanel({ language, userId }: { language: Language; us
     },
     initialPageParam: "",
     getNextPageParam: (page) => page.nextCursor ?? undefined,
-    enabled: tab === "toking"
+    enabled: tokingConnected && tab === "toking"
   });
   const t = copy[language];
   const names: Record<string, string> = language === "zh" ? { payment: "充值", redeem: "兑换", chat_usage: "聊天用量", admin_adjustment: "余额调整", refund: "退还" } : { payment: "Recharge", redeem: "Redeemed", chat_usage: "Chat usage", admin_adjustment: "Balance adjustment", refund: "Refund" };
@@ -178,7 +178,7 @@ export function PaymentUsagePanel({ language, userId }: { language: Language; us
   return <>
     <div className="gg-usage-tabs" role="tablist" aria-label={language === "zh" ? "账单类型" : "Billing activity type"}>
       <button role="tab" aria-selected={tab === "balance"} aria-pressed={tab === "balance"} onClick={() => setTab("balance")}>{language === "zh" ? "余额" : "Balance"}</button>
-      <button role="tab" aria-selected={tab === "toking"} aria-pressed={tab === "toking"} onClick={() => setTab("toking")}>{language === "zh" ? "Toking 钱包" : "Toking Wallet"}</button>
+      {tokingConnected && <button role="tab" aria-selected={tab === "toking"} aria-pressed={tab === "toking"} onClick={() => setTab("toking")}>{language === "zh" ? "Toking 钱包" : "Toking Wallet"}</button>}
     </div>
 
     <p className="gg-eyebrow gg-history-label">{language === "zh" ? "历史记录" : "History"}</p>
@@ -189,7 +189,7 @@ export function PaymentUsagePanel({ language, userId }: { language: Language; us
       <div className="gg-ledger">{ledger.data?.entries.map((row) => <div className="gg-ledger-row" key={row.id}><div><strong>{names[row.type] ?? row.type}</strong><p>{new Date(row.createdAt).toLocaleString(language === "zh" ? "zh-CN" : "en-US")}</p></div><div className={row.amount > 0 ? "gg-positive" : ""}><strong>{row.amount > 0 ? "+" : ""}{row.amount.toLocaleString()}</strong> <small>{t.tokens}</small></div></div>)}</div>
     </>}
 
-    {tab === "toking" && <>
+    {tokingConnected && tab === "toking" && <>
       {tokingHistory.isPending && <p>{t.loading}</p>}
       {tokingHistory.isError && <p role="alert">{t.failed} <button className="gg-text-action" onClick={() => void tokingHistory.refetch()}>{t.retry}</button></p>}
       {!tokingHistory.isPending && !tokingHistory.isError && walletRows.length === 0 && <p>{language === "zh" ? "暂无记录。" : "No activity yet."}</p>}

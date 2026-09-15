@@ -87,7 +87,7 @@ export function SettingsDialog({ language, onLanguageChange, user, initialSectio
               />
               <div className="gg-redeem-panel">{redeem}</div>
             </>}
-            {section === "usage" && <PaymentUsagePanel language={language} userId={user.id} />}
+            {section === "usage" && <PaymentUsagePanel language={language} userId={user.id} tokingConnected={user.tokingConnected} />}
             {section === "language" && <div className="gg-settings-card">{(["en", "zh"] as const).map((value) => <button className="gg-language-row" key={value} aria-pressed={language === value} onClick={() => onLanguageChange(value)}><span>{value === "en" ? "English" : "简体中文"}</span>{language === value && <Check size={16} />}</button>)}</div>}
             {(section === "terms" || section === "privacy") && <LegalContent kind={section} language={language} />}
             {section === "feedback" && <FeedbackPanel language={language} />}
