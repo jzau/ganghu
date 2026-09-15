@@ -13,6 +13,7 @@ import { redeemRoutes } from "./modules/redeem/routes.js";
 import { userRoutes } from "./modules/users/routes.js";
 import { chatRoutes } from "./modules/chat/routes.js";
 import { providerRoutes } from "./modules/provider/routes.js";
+import { tokingRoutes } from "./modules/toking/routes.js";
 
 export function buildApp() {
   const app = Fastify({
@@ -35,6 +36,7 @@ export function buildApp() {
   app.register(modelRoutes, { prefix: "/api" });
   app.register(paymentRoutes, { prefix: "/api/payments" });
   app.register(redeemRoutes, { prefix: "/api" });
+  app.register(tokingRoutes, { prefix: "/api/toking" });
   app.register(chatRoutes, { prefix: "/api" });
   app.register(adminRoutes, { prefix: "/api/admin" });
 

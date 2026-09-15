@@ -31,8 +31,30 @@ const catalogSchema = z.object({
   }))
 });
 
+const walletSchema = z.object({
+  postedBalance: z.string().regex(/^-?\d+$/),
+  reservedBalance: z.string().regex(/^\d+$/),
+  availableBalance: z.string().regex(/^-?\d+$/),
+  canReserve: z.boolean(),
+  status: z.string()
+});
+
+const walletTransactionsSchema = z.object({
+  data: z.array(z.object({
+    transactionId: z.string(),
+    type: z.string(),
+    sourceReference: z.string(),
+    amount: z.string().regex(/^-?\d+$/),
+    metadata: z.record(z.unknown()),
+    postedAt: z.string()
+  }).passthrough()),
+  nextCursor: z.string().nullable()
+});
+
 export type TokingRedemption = z.infer<typeof redemptionSchema>;
 export type TokingModel = z.infer<typeof catalogSchema>["data"][number];
+export type TokingWallet = z.infer<typeof walletSchema>;
+export type TokingWalletTransactions = z.infer<typeof walletTransactionsSchema>;
 
 export class TokingError extends Error {
   constructor(
@@ -128,6 +150,55 @@ export async function listTokingModels(input: { baseUrl: string; apiKey: string;
     return catalogSchema.parse(await response.json()).data;
   } catch {
     throw new TokingError(502, "TOKING_INVALID_RESPONSE", "Toking returned an invalid model catalog");
+  }
+}
+
+export async function getTokingWallet(input: { baseUrl: string; apiKey: string; fetchImpl?: typeof fetch }) {
+  const payload = await getTokingResource(input, "/wallet", 12_000);
+  try {
+    return walletSchema.parse(payload);
+  } catch {
+    throw new TokingError(502, "TOKING_INVALID_RESPONSE", "Toking returned an invalid wallet response");
+  }
+}
+
+export async function listTokingWalletTransactions(input: {
+  baseUrl: string;
+  apiKey: string;
+  limit: number;
+  cursor?: string;
+  fetchImpl?: typeof fetch;
+}) {
+  const query = new URLSearchParams({ limit: String(input.limit) });
+  if (input.cursor) query.set("cursor", input.cursor);
+  const payload = await getTokingResource(input, `/wallet/transactions?${query.toString()}`, 12_000);
+  try {
+    return walletTransactionsSchema.parse(payload);
+  } catch {
+    throw new TokingError(502, "TOKING_INVALID_RESPONSE", "Toking returned an invalid wallet history response");
+  }
+}
+
+async function getTokingResource(
+  input: { baseUrl: string; apiKey: string; fetchImpl?: typeof fetch },
+  path: string,
+  timeoutMs: number
+) {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  let response: Response;
+  try {
+    response = await fetchImpl(`${normalizeGatewayBaseUrl(input.baseUrl)}${path}`, {
+      headers: { Authorization: `Bearer ${input.apiKey}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+  } catch (error) {
+    throw new TokingError(503, "TOKING_UNAVAILABLE", error instanceof Error ? error.message : "Toking is unavailable");
+  }
+  if (!response.ok) throw await toTokingError(response);
+  try {
+    return await response.json();
+  } catch {
+    throw new TokingError(502, "TOKING_INVALID_RESPONSE", "Toking returned invalid JSON");
   }
 }
 

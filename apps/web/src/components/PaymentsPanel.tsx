@@ -1,5 +1,5 @@
 import type { ApiUser, PaymentCatalogDto, PaymentOrderDto } from "@ai-chat/shared";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { Language } from "../lib/i18n";
@@ -142,15 +142,76 @@ export function PaymentsPanel({ language, user }: { language: Language; user: Ap
 }
 
 interface LedgerRow { id: string; type: string; amount: number; balanceAfter: number; createdAt: string }
+interface TokingHistoryRow { id: string; type: string; amount: string; model: string | null; createdAt: string }
+interface TokingHistoryPage { data: TokingHistoryRow[]; nextCursor: string | null }
+
 export function PaymentUsagePanel({ language, userId }: { language: Language; userId: string }) {
-  const ledger = useQuery({ queryKey: ["payment-ledger", userId], queryFn: () => api<{ entries: LedgerRow[] }>("/api/payments/ledger") });
+  const [tab, setTab] = useState<"balance" | "toking">("balance");
+  const ledger = useQuery({
+    queryKey: ["payment-ledger", userId],
+    queryFn: () => api<{ entries: LedgerRow[] }>("/api/payments/ledger"),
+    enabled: tab === "balance"
+  });
+  const tokingHistory = useInfiniteQuery({
+    queryKey: ["toking-wallet-history", userId],
+    queryFn: ({ pageParam }) => {
+      const query = new URLSearchParams({ limit: "20" });
+      if (pageParam) query.set("cursor", pageParam);
+      return api<TokingHistoryPage>(`/api/toking/wallet/transactions?${query.toString()}`);
+    },
+    initialPageParam: "",
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    enabled: tab === "toking"
+  });
   const t = copy[language];
   const names: Record<string, string> = language === "zh" ? { payment: "充值", redeem: "兑换", chat_usage: "聊天用量", admin_adjustment: "余额调整", refund: "退还" } : { payment: "Recharge", redeem: "Redeemed", chat_usage: "Chat usage", admin_adjustment: "Balance adjustment", refund: "Refund" };
+  const walletRows = tokingHistory.data?.pages.flatMap((page) => page.data) ?? [];
+  const walletName = (row: TokingHistoryRow) => {
+    if (row.type === "gift_card_redemption") return language === "zh" ? "礼品卡充值" : "Gift card top-up";
+    if (row.type === "ai_credit_capture") {
+      const usage = language === "zh" ? "AI 用量" : "AI usage";
+      return row.model ? `${usage} · ${row.model}` : usage;
+    }
+    if (isPositiveTokingAmount(row.amount)) return language === "zh" ? "钱包充值" : "Wallet top-up";
+    return language === "zh" ? "钱包调整" : "Wallet adjustment";
+  };
   return <>
-    <p className="gg-eyebrow">{language === "zh" ? "近期代币账单（最多100条）" : "Recent token activity (up to 100 entries)"}</p>
-    {ledger.isPending && <p>{t.loading}</p>}
-    {ledger.isError && <p role="alert">{t.failed} <button className="gg-text-action" onClick={() => void ledger.refetch()}>{t.retry}</button></p>}
-    {ledger.data?.entries.length === 0 && <p>{language === "zh" ? "暂无记录。" : "No activity yet."}</p>}
-    <div className="gg-ledger">{ledger.data?.entries.map((row) => <div className="gg-ledger-row" key={row.id}><div><strong>{names[row.type] ?? row.type}</strong><p>{new Date(row.createdAt).toLocaleString(language === "zh" ? "zh-CN" : "en-US")}</p></div><div className={row.amount > 0 ? "gg-positive" : ""}><strong>{row.amount > 0 ? "+" : ""}{row.amount.toLocaleString()}</strong> <small>{t.tokens}</small></div></div>)}</div>
+    <div className="gg-usage-tabs" role="tablist" aria-label={language === "zh" ? "账单类型" : "Billing activity type"}>
+      <button role="tab" aria-selected={tab === "balance"} aria-pressed={tab === "balance"} onClick={() => setTab("balance")}>{language === "zh" ? "余额" : "Balance"}</button>
+      <button role="tab" aria-selected={tab === "toking"} aria-pressed={tab === "toking"} onClick={() => setTab("toking")}>{language === "zh" ? "Toking 钱包" : "Toking Wallet"}</button>
+    </div>
+
+    <p className="gg-eyebrow gg-history-label">{language === "zh" ? "历史记录" : "History"}</p>
+    {tab === "balance" && <>
+      {ledger.isPending && <p>{t.loading}</p>}
+      {ledger.isError && <p role="alert">{t.failed} <button className="gg-text-action" onClick={() => void ledger.refetch()}>{t.retry}</button></p>}
+      {ledger.data?.entries.length === 0 && <p>{language === "zh" ? "暂无记录。" : "No activity yet."}</p>}
+      <div className="gg-ledger">{ledger.data?.entries.map((row) => <div className="gg-ledger-row" key={row.id}><div><strong>{names[row.type] ?? row.type}</strong><p>{new Date(row.createdAt).toLocaleString(language === "zh" ? "zh-CN" : "en-US")}</p></div><div className={row.amount > 0 ? "gg-positive" : ""}><strong>{row.amount > 0 ? "+" : ""}{row.amount.toLocaleString()}</strong> <small>{t.tokens}</small></div></div>)}</div>
+    </>}
+
+    {tab === "toking" && <>
+      {tokingHistory.isPending && <p>{t.loading}</p>}
+      {tokingHistory.isError && <p role="alert">{t.failed} <button className="gg-text-action" onClick={() => void tokingHistory.refetch()}>{t.retry}</button></p>}
+      {!tokingHistory.isPending && !tokingHistory.isError && walletRows.length === 0 && <p>{language === "zh" ? "暂无记录。" : "No activity yet."}</p>}
+      <div className="gg-ledger">{walletRows.map((row) => {
+        const amount = formatTokingAmount(row.amount);
+        return <div className="gg-ledger-row" key={row.id}><div><strong>{walletName(row)}</strong><p>{new Date(row.createdAt).toLocaleString(language === "zh" ? "zh-CN" : "en-US")}</p></div><div className={amount.positive ? "gg-positive" : ""}><strong>{amount.text}</strong> <small>{t.tokens}</small></div></div>;
+      })}</div>
+      {tokingHistory.hasNextPage && <button className="gg-wallet-more gg-text-action" disabled={tokingHistory.isFetchingNextPage} onClick={() => void tokingHistory.fetchNextPage()}>{tokingHistory.isFetchingNextPage ? t.loading : (language === "zh" ? "加载更多" : "Load more")}</button>}
+    </>}
   </>;
+}
+
+function formatTokingAmount(value: string) {
+  try {
+    const amount = BigInt(value);
+    return { positive: amount > 0n, text: `${amount > 0n ? "+" : ""}${amount.toLocaleString()}` };
+  } catch {
+    return { positive: value.startsWith("+"), text: value };
+  }
+}
+
+function isPositiveTokingAmount(value: string) {
+  try { return BigInt(value) > 0n; }
+  catch { return value.startsWith("+"); }
 }
