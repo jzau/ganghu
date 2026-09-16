@@ -11,6 +11,7 @@ import { SettingsDialog } from "../components/SettingsDialog";
 import { SearchDialog } from "../components/SearchDialog";
 import { api, endpoints } from "../lib/api";
 import { commonText, localizeErrorMessage, useLanguage, type Language } from "../lib/i18n";
+import { maskPhone } from "../lib/phone";
 
 const chatText = {
   en: {
@@ -356,7 +357,6 @@ export function ChatPage() {
     }
     return Array.from(groups, ([key, groupModels]) => ({ key, models: groupModels }));
   }, [models.data?.models]);
-  const tokingConnected = me.data?.user.tokingConnected ?? false;
   const phoneNumber = me.data?.user.phoneNumber ?? "";
   const isAuthenticated = me.isSuccess;
   const visibleConversations = isAuthenticated
@@ -697,9 +697,7 @@ export function ChatPage() {
                 </div>
                 <div className="nm-account-label min-w-0 flex-1 text-left">
                   <div className="truncate text-sm font-bold">{isAuthenticated
-                    ? tokingConnected
-                      ? language === "en" ? "Toking connected" : "已连接 Toking"
-                      : language === "en" ? "Toking not connected" : "尚未连接 Toking"
+                    ? me.data.user.displayName?.trim() || maskPhone(phoneNumber)
                     : t.guestAccount}</div>
                 </div>
                 {isAuthenticated && <Menu size={15} className="nm-account-menu-icon shrink-0 opacity-50" />}

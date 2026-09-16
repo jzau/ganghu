@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { createPortal } from "react-dom";
 import { api } from "../lib/api";
 import { localizeErrorMessage, type Language } from "../lib/i18n";
+import { maskPhone } from "../lib/phone";
 import { Button } from "./Button";
 import { supportedCountries, type CountryCode } from "./LoginForm";
 import { LegalContent } from "../pages/LegalPage";
@@ -182,13 +183,6 @@ function ProfilePanel({ language, user, onAccountDeleted }: { language: Language
     {mode === "delete" && <div className="gg-nested-backdrop"><div className="gg-nested-modal"><button type="button" className="gg-nested-close" onClick={() => reset()} aria-label="Close"><X size={16} /></button><h3>{t.deleteConfirmTitle}</h3><p>{t.confirmHint}</p><label>{t.confirmLabel}<input className="nm-field" value={confirmation} autoFocus autoComplete="off" onChange={(event) => setConfirmation(event.target.value)} placeholder="delete my account" /></label><div className="gg-form-actions"><Button type="button" variant="ghost" onClick={() => reset()}>{t.cancel}</Button><Button type="button" className="gg-delete-button" disabled={pending || confirmation !== "delete my account"} onClick={() => void deleteAccount()}>{t.deleteConfirm}</Button></div></div></div>}
     {mode !== "phone" && message && <p className="gg-form-message is-success" role="status">{message}</p>}{mode !== "phone" && error && <p className="gg-form-message is-error" role="alert">{error}</p>}
   </>;
-}
-
-function maskPhone(phone: string) {
-  const countryCode = [...supportedCountries].sort((a, b) => b.code.length - a.code.length).find((item) => phone.startsWith(item.code))?.code;
-  if (!countryCode) return phone;
-  const localNumber = phone.slice(countryCode.length);
-  return localNumber.length >= 7 ? `${countryCode} ${localNumber.slice(0, 3)} •••• ${localNumber.slice(-4)}` : phone;
 }
 
 function countryCodeOptions(language: Language) {
