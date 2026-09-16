@@ -31,6 +31,7 @@ const schema = z.object({
   PAYMENT_METHODS_JSON: z.string().default("[]"),
   API_PORT: z.coerce.number().default(4000),
   WEB_ORIGIN: z.string().default("http://localhost:5173"),
+  VISITOR_CHAT_ENABLED: booleanFromEnv.default(true),
   SESSION_SECRET: z.string().min(16).default("dev-session-secret-change-me"),
   ADMIN_PASSWORD: z.string().min(1).default("change-me"),
   AUTH_SERVICE_ENABLED: booleanFromEnv.default(false),

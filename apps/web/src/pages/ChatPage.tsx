@@ -1,17 +1,16 @@
-import type { ApiUser, LlmModelDto, MessageDto } from "@ai-chat/shared";
+import type { LlmModelDto, MessageDto } from "@ai-chat/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronDown, Copy, Gift, Globe, Menu, ChevronsLeft, ChevronsRight, SquarePen, ArrowUp, Sparkles, Square, Trash2, Upload, UserRound, Search } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, Copy, Globe, Menu, ChevronsLeft, ChevronsRight, SquarePen, ArrowUp, Sparkles, Square, Trash2, Upload, Search, Settings } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useNavigate, useParams } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 import { BrandLockup } from "../components/BrandLockup";
 import { Button } from "../components/Button";
-import { SettingsDialog } from "../components/SettingsDialog";
 import { SearchDialog } from "../components/SearchDialog";
+import { SettingsDialog } from "../components/SettingsDialog";
 import { api, endpoints } from "../lib/api";
-import { commonText, localizeErrorMessage, useLanguage, type Language } from "../lib/i18n";
-import { maskPhone } from "../lib/phone";
+import { localizeErrorMessage, useLanguage, type Language } from "../lib/i18n";
 
 const chatText = {
   en: {
@@ -21,12 +20,14 @@ const chatText = {
     newChat: "New conversation",
     history: "Recent",
     search: "Search",
+    settings: "Settings",
     collapseSidebar: "Collapse sidebar",
-    openAccountMenu: "Open account menu",
     openConversations: "Open conversations",
     reopenSidebar: "Open sidebar",
     selectModel: "Select model",
     modelsLoading: "Models loading",
+    modelsError: "Could not load models. Try again.",
+    modelsEmpty: "No chat models are available.",
     models: "Models",
     modelCount: (count: number) => `${count} models`,
     startConversation: "Start a conversation",
@@ -35,17 +36,12 @@ const chatText = {
     messagePlaceholder: "Ask anything. Keep the context, switch the model.",
     sendMessage: "Send message",
     stopResponse: "Stop response",
-    redeemCode: "Redeem code",
-    code: "Code",
-    addedTokens: (amount: string) => `Added ${formatCreditAmount(amount)} Toking credits`,
     chatFailed: "Chat failed",
     shareConversation: "Share conversation",
     shareCopied: "Share link copied successfully",
     shareFailed: "Could not create share link",
     streamInterrupted: "Response was interrupted. Refreshing conversation.",
     modelLocked: "Model is locked for this conversation",
-    signInRequired: "Sign in to continue",
-    guestAccount: "Log in",
     deleteConversationTitle: "Delete conversation?",
     deleteConversationBody: "This conversation will be permanently deleted.",
     cancel: "Cancel",
@@ -58,12 +54,14 @@ const chatText = {
     newChat: "新建对话",
     history: "最近对话",
     search: "搜索",
+    settings: "设置",
     collapseSidebar: "收起侧边栏",
-    openAccountMenu: "打开账户菜单",
     openConversations: "打开会话列表",
     reopenSidebar: "展开侧边栏",
     selectModel: "选择模型",
     modelsLoading: "模型加载中",
+    modelsError: "模型加载失败，请重试。",
+    modelsEmpty: "暂无可用的聊天模型。",
     models: "模型",
     modelCount: (count: number) => `${count} 个模型`,
     startConversation: "开始对话",
@@ -72,17 +70,12 @@ const chatText = {
     messagePlaceholder: "输入消息",
     sendMessage: "发送消息",
     stopResponse: "停止回复",
-    redeemCode: "兑换码",
-    code: "兑换码",
-    addedTokens: (amount: string) => `已添加 ${formatCreditAmount(amount)} 个 Toking 积分`,
     chatFailed: "聊天失败",
     shareConversation: "分享对话",
     shareCopied: "分享链接复制成功",
     shareFailed: "无法创建分享链接",
     streamInterrupted: "回复已中断，正在刷新对话。",
     modelLocked: "此对话已锁定模型",
-    signInRequired: "请先登录",
-    guestAccount: "登录",
     deleteConversationTitle: "删除对话？",
     deleteConversationBody: "此对话将被永久删除。",
     cancel: "取消",
@@ -94,10 +87,6 @@ const defaultConversationTitles = new Set<string>(["New chat", chatText.en.newCh
 
 function conversationTitleForLanguage(title: string, language: Language) {
   return defaultConversationTitles.has(title) ? chatText[language].newChat : title;
-}
-
-function formatCreditAmount(value: string) {
-  try { return BigInt(value).toLocaleString(); } catch { return value; }
 }
 
 function clearTextSelection() {
@@ -201,9 +190,7 @@ export function ChatPage() {
   const { conversationId: routeConversationId = "" } = useParams();
   const { language, setLanguage } = useLanguage();
   const t = chatText[language];
-  const common = commonText[language];
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const composingMessageRef = useRef(false);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -242,22 +229,20 @@ export function ChatPage() {
   const [toastMessage, setToastMessage] = useState("");
   const [toastKind, setToastKind] = useState<"error" | "success">("error");
   const [isSending, setIsSending] = useState(false);
-  const [accountMenuView, setAccountMenuView] = useState<"main" | "redeem" | "recharge">(() => new URLSearchParams(window.location.search).has("payment") ? "recharge" : "main");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
-  const [accountMenuOpen, setAccountMenuOpen] = useState(() => new URLSearchParams(window.location.search).has("payment"));
   const [scrollingAreas, setScrollingAreas] = useState<Record<string, boolean>>({});
   const [searchDialogOpen, setSearchDialogOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [revealedDeleteConversationId, setRevealedDeleteConversationId] = useState<string | null>(null);
 
-  const me = useQuery({ queryKey: ["me"], queryFn: endpoints.me, retry: false });
-  const models = useQuery({ queryKey: ["models"], queryFn: endpoints.models, enabled: me.isSuccess });
-  const conversations = useQuery({ queryKey: ["conversations"], queryFn: endpoints.conversations, enabled: me.isSuccess });
+  const models = useQuery({ queryKey: ["models"], queryFn: endpoints.models });
+  const conversations = useQuery({ queryKey: ["conversations"], queryFn: endpoints.conversations });
   const messages = useQuery({
     queryKey: ["messages", activeConversationId],
     queryFn: () => endpoints.messages(activeConversationId),
-    enabled: Boolean(activeConversationId && me.isSuccess)
+    enabled: Boolean(activeConversationId && conversations.isSuccess)
   });
 
   useEffect(() => {
@@ -357,11 +342,7 @@ export function ChatPage() {
     }
     return Array.from(groups, ([key, groupModels]) => ({ key, models: groupModels }));
   }, [models.data?.models]);
-  const phoneNumber = me.data?.user.phoneNumber ?? "";
-  const isAuthenticated = me.isSuccess;
-  const visibleConversations = isAuthenticated
-    ? (conversations.data?.conversations ?? []).filter((conversation) => !conversation.isDraft)
-    : [];
+  const visibleConversations = (conversations.data?.conversations ?? []).filter((conversation) => !conversation.isDraft);
   const activeConversation = visibleConversations.find((conversation) => conversation.id === activeConversationId);
   const activeConversationTitle = activeConversation ? conversationTitleForLanguage(activeConversation.title, language) : t.startConversation;
 
@@ -369,13 +350,12 @@ export function ChatPage() {
     function openSearch(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        if (isAuthenticated) setSearchDialogOpen(true);
-        else navigate(`/login?returnTo=${encodeURIComponent(window.location.pathname)}`);
+        setSearchDialogOpen(true);
       }
     }
     document.addEventListener("keydown", openSearch);
     return () => document.removeEventListener("keydown", openSearch);
-  }, [isAuthenticated, navigate]);
+  }, []);
 
   useEffect(() => {
     if (initializedModelConversation.current === activeConversationId) return;
@@ -391,22 +371,20 @@ export function ChatPage() {
   }, [modelSelectionLocked]);
 
   useEffect(() => {
-    if (!accountMenuOpen && !modelMenuOpen && !revealedDeleteConversationId) return;
+    if (!modelMenuOpen && !revealedDeleteConversationId) return;
 
     function closeMenusOnOutsidePointer(event: PointerEvent) {
       const target = event.target;
       if (!(target instanceof Node)) return;
-      if (accountMenuRef.current?.contains(target) || modelMenuRef.current?.contains(target)) return;
+      if (modelMenuRef.current?.contains(target)) return;
       if (target instanceof Element && target.closest(".nm-history-item, .gg-settings-backdrop")) return;
-      setAccountMenuOpen(false);
-      setAccountMenuView("main");
       setModelMenuOpen(false);
       setRevealedDeleteConversationId(null);
     }
 
     document.addEventListener("pointerdown", closeMenusOnOutsidePointer);
     return () => document.removeEventListener("pointerdown", closeMenusOnOutsidePointer);
-  }, [accountMenuOpen, modelMenuOpen, revealedDeleteConversationId]);
+  }, [modelMenuOpen, revealedDeleteConversationId]);
 
   useEffect(() => {
     if (!activeConversationId) return;
@@ -416,17 +394,8 @@ export function ChatPage() {
     return () => window.cancelAnimationFrame(frameId);
   }, [activeConversationId, allMessages.length, streamingText]);
 
-  function requireAuth() {
-    if (isAuthenticated) return true;
-    setAccountMenuOpen(false);
-    setAccountMenuView("main");
-    navigate(`/login?returnTo=${encodeURIComponent(window.location.pathname)}`);
-    return false;
-  }
-
   async function sendMessage() {
-    if (!draft.trim() || !modelId || isSending || sendInFlightRef.current || conversationIsLoading) return;
-    if (!requireAuth()) return;
+    if (!draft.trim() || !modelId || isSending || sendInFlightRef.current || conversationIsLoading || !conversations.isSuccess) return;
     const message = draft;
     const optimisticMessage: MessageDto = {
       id: `pending-${Date.now()}`,
@@ -452,7 +421,7 @@ export function ChatPage() {
     let serverAcceptedMessage = false;
     let serverSentErrorEvent = false;
     try {
-      const response = await fetch("/api/chat/stream", {
+      const response = await fetch("/api/visitor/chat/stream", {
         method: "POST",
         signal: abortController.signal,
         credentials: "include",
@@ -503,7 +472,6 @@ export function ChatPage() {
             setCompletedAssistantMessage({ ...data.message, renderKey: assistantRenderKey });
             setStreamingText("");
             setIsSending(false);
-            queryClient.invalidateQueries({ queryKey: ["me"] });
             queryClient.invalidateQueries({ queryKey: ["models"] });
             queryClient.invalidateQueries({ queryKey: ["conversations"] });
             setPendingUserMessage((pending) => pending ? { ...pending, conversationId: data.message.conversationId } : pending);
@@ -545,7 +513,6 @@ export function ChatPage() {
   }
 
   function startNewChat() {
-    if (!requireAuth()) return;
     setSidebarOpen(false);
     if (!activeConversationId) return;
 
@@ -562,7 +529,7 @@ export function ChatPage() {
   }
 
   const deleteConversation = useMutation({
-    mutationFn: (id: string) => api(`/api/conversations/${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => api(`/api/visitor/conversations/${id}`, { method: "DELETE" }),
     onSuccess: (_, id) => {
       if (activeConversationId === id) {
         activeConversationIdRef.current = "";
@@ -597,7 +564,7 @@ export function ChatPage() {
   }
 
   const shareConversation = useMutation({
-    mutationFn: (id: string) => api<{ token: string }>(`/api/conversations/${id}/share`, { method: "POST" }),
+    mutationFn: (id: string) => api<{ token: string }>(`/api/visitor/conversations/${id}/share`, { method: "POST" }),
     onSuccess: async (data) => {
       const url = `${window.location.origin}/share/${data.token}`;
       await window.navigator.clipboard?.writeText(url).catch(() => undefined);
@@ -621,15 +588,13 @@ export function ChatPage() {
               <a className="nm-brand nm-sidebar-brand nm-brand-home" href="/" aria-label={t.home} title={t.home}>
                 <BrandLockup language={language} />
               </a>
-              <button className="nm-icon-button nm-sidebar-search" onClick={() => { if (requireAuth()) setSearchDialogOpen(true); }} aria-label={t.search} title={`${t.search} (⌘K)`}>
+              <button className="nm-icon-button nm-sidebar-search" onClick={() => setSearchDialogOpen(true)} aria-label={t.search} title={`${t.search} (⌘K)`}>
                 <Search size={14} />
               </button>
               <button
                 className="nm-icon-button nm-sidebar-toggle hidden md:grid"
                 onClick={() => {
                   setSidebarCollapsed((collapsed) => !collapsed);
-                  setAccountMenuOpen(false);
-                  setAccountMenuView("main");
                 }}
                 aria-label={sidebarCollapsed ? t.reopenSidebar : t.collapseSidebar}
                 title={sidebarCollapsed ? t.reopenSidebar : t.collapseSidebar}
@@ -682,70 +647,11 @@ export function ChatPage() {
               ))}
             </div>
 
-            <div className="nm-account-anchor relative" ref={accountMenuRef}>
-              <button
-                className={`nm-account ${accountMenuOpen ? "is-open" : ""}`}
-                aria-label={isAuthenticated ? t.openAccountMenu : t.guestAccount}
-                onClick={() => {
-                  if (!requireAuth()) return;
-                  if (accountMenuOpen) setAccountMenuView("main");
-                  setAccountMenuOpen((open) => !open);
-                }}
-              >
-                <div className="nm-avatar-sm" aria-hidden="true">
-                  <UserRound size={14} />
-                </div>
-                <div className="nm-account-label min-w-0 flex-1 text-left">
-                  <div className="truncate text-sm font-bold">{isAuthenticated
-                    ? me.data.user.displayName?.trim() || maskPhone(phoneNumber)
-                    : t.guestAccount}</div>
-                </div>
-                {isAuthenticated && <Menu size={15} className="nm-account-menu-icon shrink-0 opacity-50" />}
+            <div className="nm-account-anchor">
+              <button className="nm-account" onClick={() => setSettingsOpen(true)} aria-label={t.settings} title={t.settings}>
+                <span className="nm-avatar-sm" aria-hidden="true"><Settings size={14} /></span>
+                <span className="nm-account-label min-w-0 flex-1 text-left text-sm">{t.settings}</span>
               </button>
-              <button
-                className="nm-redeem-entry"
-                onClick={() => {
-                  if (!requireAuth()) return;
-                  setAccountMenuView("redeem");
-                  setAccountMenuOpen(true);
-                }}
-                title={common.redeem}
-              >
-                <Gift size={14} />
-                <span>{language === "en" ? "Redeem Gift Card" : "兑换礼品卡"}</span>
-              </button>
-              {accountMenuOpen && me.data?.user && (
-                <SettingsDialog
-                  language={language}
-                  onLanguageChange={setLanguage}
-                  user={me.data.user}
-                  initialSection={accountMenuView === "redeem" ? "tokens" : accountMenuView === "recharge" ? "credits" : "profile"}
-                  onClose={() => { setAccountMenuOpen(false); setAccountMenuView("main"); }}
-                  redeem={<RedeemCodeMenu language={language} />}
-                  onLogout={async () => {
-                        await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
-                        setActiveConversationId("");
-                        setPendingUserMessage(null);
-                        setCompletedAssistantMessage(null);
-                        setStreamingText("");
-                        navigate("/");
-                        setAccountMenuOpen(false);
-                        setAccountMenuView("main");
-                        queryClient.removeQueries({ queryKey: ["conversations"] });
-                        queryClient.removeQueries({ queryKey: ["messages"] });
-                        queryClient.resetQueries({ queryKey: ["me"] });
-                      }}
-                  onAccountDeleted={() => {
-                    setActiveConversationId("");
-                    setPendingUserMessage(null);
-                    setCompletedAssistantMessage(null);
-                    setStreamingText("");
-                    setAccountMenuOpen(false);
-                    queryClient.clear();
-                    navigate("/");
-                  }}
-                />
-              )}
             </div>
           </aside>
 
@@ -757,23 +663,15 @@ export function ChatPage() {
 
 
 
-              {!isAuthenticated ? (
-                <button className="nm-login-entry ml-auto" onClick={() => navigate(`/login?returnTo=${encodeURIComponent(window.location.pathname)}`)}>
-                  {language === "en" ? "Log in" : "登录"}
-                </button>
-              ) : (
               <button
                 className="nm-icon-button nm-share-button ml-auto"
-                onClick={() => {
-                  if (!shareDisabled) shareConversation.mutate(activeConversationId);
-                }}
+                onClick={() => { if (!shareDisabled) shareConversation.mutate(activeConversationId); }}
                 aria-label={t.shareConversation}
                 title={t.shareConversation}
                 disabled={shareDisabled}
               >
                 {shareConversation.isPending ? <span className="nm-button-spinner" aria-hidden="true" /> : <Upload size={18} />}
               </button>
-              )}
             </header>
 
             <div className={`nm-messages ${allMessages.length === 0 ? "is-empty" : ""} ${scrollingAreas.messages ? "is-scrolling" : ""}`} onScroll={() => markScrolling("messages")}>
@@ -860,6 +758,9 @@ export function ChatPage() {
                     aria-label={t.models}
                     onScroll={() => markScrolling("modelMenu")}
                   >
+                    {models.isPending && <p className="nm-model-status">{t.modelsLoading}</p>}
+                    {models.isError && <button className="nm-model-status" onClick={() => void models.refetch()}>{t.modelsError}</button>}
+                    {models.isSuccess && modelGroups.length === 0 && <p className="nm-model-status">{t.modelsEmpty}</p>}
                     {modelGroups.flatMap((group) => group.models).map((model) => (
                           <button
                             key={model.id}
@@ -895,7 +796,7 @@ export function ChatPage() {
                   className={`nm-send-button px-0 disabled:!cursor-default ${isActiveConversationSending ? "is-stop" : ""}`}
                   onClick={isActiveConversationSending ? stopResponse : sendMessage}
                   aria-label={isActiveConversationSending ? t.stopResponse : t.sendMessage}
-                  disabled={isActiveConversationSending ? false : isSending || !draft.trim() || !modelId || conversationIsLoading}
+                  disabled={isActiveConversationSending ? false : isSending || !draft.trim() || !modelId || conversationIsLoading || !conversations.isSuccess}
                 >
                   {isActiveConversationSending ? <Square size={17} fill="currentColor" /> : <ArrowUp size={16} />}
                 </Button>
@@ -911,6 +812,7 @@ export function ChatPage() {
           <span>{toastMessage}</span>
         </div>
       )}
+      {settingsOpen && <SettingsDialog language={language} onLanguageChange={setLanguage} onClose={() => setSettingsOpen(false)} />}
       {searchDialogOpen && (
         <SearchDialog
           language={language}
@@ -945,72 +847,5 @@ export function MessageContent({ message }: { message: MessageDto }) {
     >
       {message.content}
     </ReactMarkdown>
-  );
-}
-
-function RedeemCodeMenu({ language }: { language: Language }) {
-  const queryClient = useQueryClient();
-  const t = chatText[language];
-  const common = commonText[language];
-  const [code, setCode] = useState("");
-  const [message, setMessage] = useState("");
-  const [messageKind, setMessageKind] = useState<"error" | "success">("success");
-  const redeemMutation = useMutation({
-    mutationFn: (redeemCode: string) => api<{ credited: string; balanceAfter: string; walletCreated: boolean; connected: true }>("/api/redeem", { method: "POST", body: JSON.stringify({ code: redeemCode }) }),
-    onSuccess: (result) => {
-      setCode("");
-      setMessageKind("success");
-      setMessage(t.addedTokens(result.credited));
-      void queryClient.invalidateQueries({ queryKey: ["me"] });
-      void queryClient.invalidateQueries({ queryKey: ["models"] });
-    },
-    onError: (error) => {
-      setMessageKind("error");
-      setMessage(localizeErrorMessage(error, language, t.chatFailed));
-    }
-  });
-
-  function redeem() {
-    const redeemCodeBody = code.replace(/\s/g, "").trim().replace(/^TK/i, "");
-    if (!redeemCodeBody || redeemMutation.isPending) return;
-    redeemMutation.mutate(`TK${redeemCodeBody}`);
-  }
-
-  return (
-    <form
-      className="nm-account-redeem"
-      onSubmit={(event) => {
-        event.preventDefault();
-        redeem();
-      }}
-    >
-      <label className="nm-account-redeem-title" htmlFor="redeem-gift-code">
-        {language === "en" ? "Redeem gift card" : "兑换礼品卡"}
-      </label>
-      <div className="gg-redeem-code-input">
-        <span aria-hidden="true">TK</span>
-        <input
-          id="redeem-gift-code"
-          className="nm-field"
-          value={code}
-          onChange={(event) => {
-            const body = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^TK/, "").slice(0, 14);
-            setCode(body.match(/.{1,4}/g)?.join(" ") ?? "");
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter") return;
-            event.preventDefault();
-            redeem();
-          }}
-          placeholder="XXXX  XXXX  XXXX  XX"
-          autoComplete="off"
-          spellCheck={false}
-        />
-      </div>
-      {message && <p className={`nm-account-redeem-message ${messageKind === "success" ? "is-success" : "is-error"}`}>{message}</p>}
-      <Button className="nm-account-redeem-submit w-full" type="submit" disabled={!code.trim() || redeemMutation.isPending}>
-        {redeemMutation.isPending ? <span className="nm-button-spinner" aria-hidden="true" /> : common.redeem}
-      </Button>
-    </form>
   );
 }

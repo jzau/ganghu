@@ -359,3 +359,6 @@ svg.lucide,svg.lucide :where(path,circle,rect,line,polyline,polygon,ellipse) { s
 @media (min-width:768px) {
   .nm-layout.is-sidebar-collapsed .nm-account-anchor { padding: 10px 0 0; margin-right: 0; }
 }
+
+
+.nm-model-status { display:block; width:100%; padding:12px 14px; color:#666; text-align:left; font-size:12px; }

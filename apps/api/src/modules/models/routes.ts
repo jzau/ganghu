@@ -1,65 +1,60 @@
 import type { FastifyPluginAsync } from "fastify";
-import { createHash } from "node:crypto";
 import { toModelDto } from "../../lib/mapper.js";
 import { prisma } from "../../lib/prisma.js";
-import { getTokingWallet, listTokingModels, readTokingConnection, TokingError, tokingHttpStatus, type TokingModel } from "../toking/client.js";
+import { env } from "../../lib/env.js";
 
-export const modelRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/models", { preHandler: app.authenticateUser }, async (request, reply) => {
-    const user = await prisma.user.findUniqueOrThrow({ where: { id: request.user!.id } });
-    try {
-      const connection = readTokingConnection(user);
-      if (!connection) return { models: await listGangramModels() };
-      if (user.tokingCreditsExhausted) return { models: await listGangramModels() };
-      const wallet = await getTokingWallet(connection);
-      if (!wallet.canReserve || BigInt(wallet.availableBalance) <= 0n) {
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { tokingBalance: wallet.availableBalance, tokingCreditsExhausted: true }
-        });
-        return { models: await listGangramModels() };
-      }
-      if (user.tokingBalance !== wallet.availableBalance) {
-        await prisma.user.update({ where: { id: user.id }, data: { tokingBalance: wallet.availableBalance } });
-      }
-      const remoteModels = await listTokingModels(connection);
-      const models = await Promise.all(remoteModels.map((model, index) => syncTokingModel(model, index)));
-      return { models: models.map(toModelDto) };
-    } catch (error) {
-      if (error instanceof TokingError) {
-        return reply.code(tokingHttpStatus(error.status)).send({ code: error.code, message: error.message, retryable: error.retryable });
-      }
-      throw error;
-    }
-  });
-};
-
-async function listGangramModels() {
-  const models = await prisma.llmModel.findMany({
-    where: { enabled: true, provider: "openrouter" },
-    orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }]
-  });
-  return models.map(toModelDto);
-}
-
-function syncTokingModel(model: TokingModel, sortOrder: number) {
-  const id = `toking-${createHash("sha256").update(model.id).digest("hex").slice(0, 24)}`;
-  const contextWindowTokens = Math.max(1_000, model.context_length ?? 128_000);
-  const data = {
-    displayName: model.name?.trim() || model.id.split("/").at(-1) || model.id,
-    provider: "toking",
-    providerModelId: model.id,
+const defaultVisitorModels = [
+  {
+    id: "seed-deepseek-chat",
+    displayName: "DeepSeek Chat",
+    displayNameZh: "深度求索聊天",
+    provider: "openrouter",
+    providerModelId: "deepseek/deepseek-chat",
     enabled: true,
     inputAppTokensPer1k: 0,
     outputAppTokensPer1k: 0,
     minimumRequiredBalance: 0,
-    maxOutputTokens: Math.min(4_096, contextWindowTokens - 1),
-    contextWindowTokens,
-    sortOrder
-  };
-  return prisma.llmModel.upsert({
-    where: { id },
-    create: { id, ...data },
-    update: data
+    maxOutputTokens: 2000,
+    contextWindowTokens: 64000,
+    sortOrder: 10
+  },
+  {
+    id: "seed-kimi-k2",
+    displayName: "Kimi",
+    displayNameZh: "Kimi",
+    provider: "openrouter",
+    providerModelId: "moonshotai/kimi-k2",
+    enabled: true,
+    inputAppTokensPer1k: 0,
+    outputAppTokensPer1k: 0,
+    minimumRequiredBalance: 0,
+    maxOutputTokens: 2000,
+    contextWindowTokens: 128000,
+    sortOrder: 20
+  }
+] as const;
+
+export const modelRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/models", async (_request, reply) => {
+    if (!env.VISITOR_CHAT_ENABLED) return reply.code(503).send({ code: "VISITOR_CHAT_DISABLED", message: "Visitor chat is unavailable" });
+    return { models: await listVisitorModels() };
   });
+};
+
+async function listVisitorModels() {
+  const query = {
+    where: { enabled: true, provider: "openrouter" },
+    orderBy: [{ sortOrder: "asc" as const }, { displayName: "asc" as const }]
+  };
+  let models = await prisma.llmModel.findMany(query);
+  if (models.length === 0) {
+    // An older installation may have only Toking models because that catalog
+    // was synced from a wallet. Keep an intentional all-disabled state intact.
+    const configuredCount = await prisma.llmModel.count({ where: { provider: "openrouter" } });
+    if (configuredCount === 0) {
+      await prisma.llmModel.createMany({ data: [...defaultVisitorModels], skipDuplicates: true });
+      models = await prisma.llmModel.findMany(query);
+    }
+  }
+  return models.map(toModelDto);
 }

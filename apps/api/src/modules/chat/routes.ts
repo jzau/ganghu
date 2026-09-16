@@ -11,7 +11,6 @@ import type { SearchResult } from "../search/contracts.js";
 import { SearchError } from "../search/search-error.js";
 import { planSearchAutomatically } from "../search/search-planner.js";
 import { isPlatformSearchConfigured, resolveSearchMode, searchForMessage, searchForPlan } from "../search/search-service.js";
-import { readTokingConnection, TokingError, tokingHttpStatus } from "../toking/client.js";
 
 const createConversationSchema = z.object({ title: z.string().min(1).max(120).optional() });
 const chatSchema = z.object({
@@ -22,15 +21,8 @@ const chatSchema = z.object({
 });
 const defaultConversationTitles = new Set(["New chat", "新建对话"]);
 
-class GangramCreditError extends Error {
-  constructor(message = "Not enough Gangram credits") {
-    super(message);
-    this.name = "GangramCreditError";
-  }
-}
-
 export const chatRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/conversations", { preHandler: app.authenticateUser }, async (request) => {
+  app.get("/conversations", { preHandler: app.authenticateChatUser }, async (request) => {
     const conversations = await prisma.conversation.findMany({
       where: { userId: request.user!.id, deletedAt: null },
       include: { _count: { select: { messages: true } } },
@@ -39,7 +31,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     return { conversations: conversations.map(toConversationDto) };
   });
 
-  app.get("/conversations/search", { preHandler: app.authenticateUser }, async (request, reply) => {
+  app.get("/conversations/search", { preHandler: app.authenticateChatUser }, async (request, reply) => {
     const parsed = z.object({ q: z.string().trim().min(1).max(120) }).safeParse(request.query);
     if (!parsed.success) return reply.code(400).send({ message: "Enter a search term" });
     const query = parsed.data.q;
@@ -76,7 +68,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.post("/conversations", { preHandler: app.authenticateUser }, async (request) => {
+  app.post("/conversations", { preHandler: app.authenticateChatUser }, async (request) => {
     const input = createConversationSchema.parse(request.body);
     const draftConversation = await prisma.conversation.findFirst({
       where: { userId: request.user!.id, deletedAt: null, messages: { none: {} } },
@@ -92,7 +84,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     return { conversation: toConversationDto(conversation) };
   });
 
-  app.get("/conversations/:id/messages", { preHandler: app.authenticateUser }, async (request, reply) => {
+  app.get("/conversations/:id/messages", { preHandler: app.authenticateChatUser }, async (request, reply) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
     const conversation = await prisma.conversation.findFirst({ where: { id, userId: request.user!.id, deletedAt: null } });
     if (!conversation) return reply.code(404).send({ message: "Conversation not found" });
@@ -100,7 +92,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     return { messages: messages.map(toMessageDto) };
   });
 
-  app.post("/conversations/:id/share", { preHandler: app.authenticateUser }, async (request, reply) => {
+  app.post("/conversations/:id/share", { preHandler: app.authenticateChatUser }, async (request, reply) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
     const conversation = await prisma.conversation.findFirst({ where: { id, userId: request.user!.id, deletedAt: null } });
     if (!conversation) return reply.code(404).send({ message: "Conversation not found" });
@@ -135,7 +127,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.delete("/conversations/:id", { preHandler: app.authenticateUser }, async (request, reply) => {
+  app.delete("/conversations/:id", { preHandler: app.authenticateChatUser }, async (request, reply) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
     const result = await prisma.conversation.updateMany({
       where: { id, userId: request.user!.id, deletedAt: null },
@@ -145,46 +137,20 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     return { ok: true };
   });
 
-  app.post("/chat/stream", { preHandler: app.authenticateUser }, async (request, reply) => {
+  app.post("/chat/stream", { preHandler: app.authenticateChatUser }, async (request, reply) => {
     const startedAt = Date.now();
     const input = chatSchema.parse(request.body);
     const searchMode = resolveSearchMode(input);
     const userId = request.user!.id;
-    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const selectedModel = await prisma.llmModel.findFirst({ where: { id: input.modelId, enabled: true } });
-    let connection: ReturnType<typeof readTokingConnection>;
-    try {
-      connection = readTokingConnection(user);
-    } catch (error) {
-      if (error instanceof TokingError) {
-        return reply.code(tokingHttpStatus(error.status)).send({ code: error.code, message: error.message });
-      }
-      throw error;
-    }
-
     if (!selectedModel) return reply.code(404).send({ message: "Model not found" });
-
-    const gangramModel = selectedModel.provider === "openrouter"
+    const model = selectedModel.provider === "openrouter"
       ? selectedModel
       : await prisma.llmModel.findFirst({
         where: { enabled: true, provider: "openrouter", providerModelId: selectedModel.providerModelId }
       });
-    let model = selectedModel;
-    let inferenceConnection = selectedModel.provider === "toking" && !user.tokingCreditsExhausted
-      ? connection ?? undefined
-      : undefined;
-    let billingSystem: "toking" | "gangram" = inferenceConnection ? "toking" : "gangram";
+    if (!model) return reply.code(404).send({ message: "Model not available" });
 
-    if (selectedModel.provider !== "toking" && selectedModel.provider !== "openrouter") {
-      return reply.code(400).send({ message: "Unsupported model provider" });
-    }
-    if (!inferenceConnection) {
-      if (!gangramModel) return reply.code(404).send({ message: "Gangram does not provide this model" });
-      model = gangramModel;
-      if (user.appTokenBalance < model.minimumRequiredBalance) {
-        return reply.code(402).send({ code: "GANGRAM_INSUFFICIENT_CREDITS", message: "Not enough Gangram credits" });
-      }
-    }
     if (searchMode === "explicit" && !(await isPlatformSearchConfigured())) {
       return reply.code(503).send({ message: "The active web search provider is not configured correctly." });
     }
@@ -232,7 +198,6 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         recentMessages: conversationMessages,
         signal: streamAbortController.signal,
         deadline: runDeadline,
-        connection: inferenceConnection,
         plannerModel: model.providerModelId
       });
       const autoSearchPlan = plannerExecution.plan;
@@ -312,57 +277,18 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         model: model.providerModelId,
         messages: llmMessages,
         maxTokens: model.maxOutputTokens,
-        signal: streamAbortController.signal,
-        connection: inferenceConnection
+        signal: streamAbortController.signal
       }), (delta) => {
         partialAssistantContent += delta;
         writeEvent(reply, "delta", { content: delta });
       });
 
-      let result;
-      try {
-        result = await streamModelResponse();
-      } catch (error) {
-        if (!(error instanceof OpenRouterError) || error.status !== 402 || !inferenceConnection || partialAssistantContent) throw error;
-
-        await prisma.user.update({
-          where: { id: userId },
-          data: { tokingCreditsExhausted: true }
-        });
-        if (!gangramModel) throw new GangramCreditError("Toking credits are insufficient and Gangram does not provide this model");
-        if (user.appTokenBalance < gangramModel.minimumRequiredBalance) throw new GangramCreditError();
-        model = gangramModel;
-        inferenceConnection = undefined;
-        billingSystem = "gangram";
-        result = await streamModelResponse();
-      }
+      const result = await streamModelResponse();
 
       const assistantMessage = await prisma.message.create({
         data: { conversationId: conversation.id, role: "assistant", content: result.content, modelId: model.id }
       });
-      const inputCharge = billingSystem === "gangram" ? Math.ceil((result.usage.promptTokens / 1000) * model.inputAppTokensPer1k) : 0;
-      const outputCharge = billingSystem === "gangram" ? Math.ceil((result.usage.completionTokens / 1000) * model.outputAppTokensPer1k) : 0;
-      const totalCharge = inputCharge + outputCharge;
-      let updatedBalance: number | undefined;
       await prisma.$transaction(async (tx) => {
-        if (billingSystem === "gangram") {
-          const freshUser = await tx.user.findUniqueOrThrow({ where: { id: userId } });
-          const nextBalance = Math.max(0, freshUser.appTokenBalance - totalCharge);
-          const chargedAmount = freshUser.appTokenBalance - nextBalance;
-          const updatedUser = await tx.user.update({ where: { id: userId }, data: { appTokenBalance: nextBalance } });
-          updatedBalance = updatedUser.appTokenBalance;
-          await tx.appTokenLedger.create({
-            data: {
-              userId,
-              type: "chat_usage",
-              amount: -chargedAmount,
-              balanceAfter: nextBalance,
-              sourceType: "message",
-              sourceId: assistantMessage.id,
-              metadata: { requestedCharge: totalCharge, billingSystem: "gangram" }
-            }
-          });
-        }
         await tx.chatUsageRecord.create({
           data: {
             userId,
@@ -374,9 +300,9 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
             promptTokens: result.usage.promptTokens,
             completionTokens: result.usage.completionTokens,
             totalTokens: result.usage.totalTokens,
-            inputAppTokensCharged: inputCharge,
-            outputAppTokensCharged: outputCharge,
-            totalAppTokensCharged: totalCharge,
+            inputAppTokensCharged: 0,
+            outputAppTokensCharged: 0,
+            totalAppTokensCharged: 0,
             openrouterGenerationId: result.generationId,
             openrouterCost: result.cost
           }
@@ -397,18 +323,14 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         prompt_tokens: result.usage.promptTokens,
         completion_tokens: result.usage.completionTokens,
         total_tokens: result.usage.totalTokens,
-        billing_system: billingSystem,
+        billing_system: "free",
         response_time_ms: Date.now() - startedAt
       });
 
       writeEvent(reply, "done", {
         message: toMessageDto(assistantMessage),
         sources: searchResults,
-        usage: {
-          ...result.usage,
-          totalAppTokensCharged: totalCharge,
-          ...(billingSystem === "gangram" ? { updatedBalance } : { tokingBalance: user.tokingBalance })
-        }
+        usage: { ...result.usage, totalAppTokensCharged: 0 }
       });
       reply.raw.end();
     } catch (error) {
@@ -547,9 +469,6 @@ function trimMessages(messages: LlmChatMessage[], maxTokens: number) {
 }
 
 function toChatStreamError(error: unknown) {
-  if (error instanceof GangramCreditError) {
-    return { code: "GANGRAM_INSUFFICIENT_CREDITS", message: error.message };
-  }
   if (error instanceof SearchError) {
     return {
       code: `SEARCH_${error.code.toUpperCase()}`,
@@ -559,8 +478,8 @@ function toChatStreamError(error: unknown) {
   }
   if (error instanceof OpenRouterError) {
     return {
-      code: error.status === 402 ? "TOKING_INSUFFICIENT_CREDITS" : "TOKING_REQUEST_FAILED",
-      message: friendlyTokingMessage(error)
+      code: "MODEL_REQUEST_FAILED",
+      message: friendlyModelMessage(error)
     };
   }
 
@@ -575,15 +494,15 @@ function friendlySearchMessage(error: SearchError) {
   return "Web search is temporarily unavailable. Please try again.";
 }
 
-function friendlyTokingMessage(error: OpenRouterError) {
+function friendlyModelMessage(error: OpenRouterError) {
   const providerMessage = error.providerMessage?.replace(/\s+/g, " ").trim();
-  if (error.status === 402) return "Your Toking balance is too low. Redeem another gift card to continue.";
+  if (error.status === 402) return "The model provider is unavailable. Please try again later.";
   if (error.status === 429) {
-    return providerMessage ? `Toking is rate limited: ${providerMessage}` : "Toking is rate limited. Please try again shortly.";
+    return providerMessage ? `Model provider is rate limited: ${providerMessage}` : "Model provider is rate limited. Please try again shortly.";
   }
   if (error.status >= 500) {
-    return providerMessage ? `Toking is temporarily unavailable: ${providerMessage}` : `Toking is temporarily unavailable (${error.status}).`;
+    return providerMessage ? `Model provider is temporarily unavailable: ${providerMessage}` : `Model provider is temporarily unavailable (${error.status}).`;
   }
-  if (providerMessage) return `Toking error: ${providerMessage}`;
-  return `Toking request failed with status ${error.status}`;
+  if (providerMessage) return `Model provider error: ${providerMessage}`;
+  return `Model request failed with status ${error.status}`;
 }

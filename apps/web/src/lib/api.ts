@@ -21,9 +21,9 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
 export const endpoints = {
   me: () => api<{ user: ApiUser }>("/api/me"),
   updateMe: (input: { displayName: string | null }) => api<{ user: ApiUser }>("/api/me", { method: "PATCH", body: JSON.stringify(input) }),
-  models: () => api<{ models: LlmModelDto[] }>("/api/models"),
-  conversations: () => api<{ conversations: ConversationDto[] }>("/api/conversations"),
-  searchConversations: (query: string) => api<{ results: ConversationSearchResultDto[] }>(`/api/conversations/search?q=${encodeURIComponent(query)}`),
-  messages: (conversationId: string) => api<{ messages: MessageDto[] }>(`/api/conversations/${conversationId}/messages`),
-  sharedConversation: (token: string) => api<{ share: ConversationShareDto }>(`/api/shared/${token}`)
+  models: () => api<{ models: LlmModelDto[] }>("/api/visitor/models"),
+  conversations: () => api<{ conversations: ConversationDto[] }>("/api/visitor/conversations"),
+  searchConversations: (query: string) => api<{ results: ConversationSearchResultDto[] }>(`/api/visitor/conversations/search?q=${encodeURIComponent(query)}`),
+  messages: (conversationId: string) => api<{ messages: MessageDto[] }>(`/api/visitor/conversations/${conversationId}/messages`),
+  sharedConversation: (token: string) => api<{ share: ConversationShareDto }>(`/api/visitor/shared/${token}`)
 };

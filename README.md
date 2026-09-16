@@ -30,7 +30,7 @@ Gangram is a modular AI chatbot and an upstream AI provider for Toking. Its visi
    npm run dev
    ```
 
-The mock OTP code is `000000`. Configure credentials for Tavily, Alibaba IQS, Baidu Qianfan, Perplexity, and/or Doubao Search to enable provider-independent web search for every configured answer model. `SEARCH_PRIMARY_PROVIDER` sets the initial fallback provider; after the database migration is applied, an administrator can change the active provider at runtime under **Admin → Search Settings** without restarting the API. Search defaults to `auto`; the chat API also accepts `searchMode: "off" | "explicit" | "auto"` when a caller needs an override. For connected users, automatic search planning uses the selected model through Toking, just like the final answer request.
+Visitors can chat without an account at `/`. The web app uses `/api/visitor` for models, conversations, and streaming responses. A private browser cookie keeps each visitor's conversation history separate. Set `VISITOR_CHAT_ENABLED=false` and restart the API to return HTTP 503 from the visitor chat and model endpoints. The admin API remains available at `/api/admin`. Configure `OPENROUTER_API_KEY` and enable at least one OpenRouter model for chat responses. Configure a search provider if you want web search.
 
 ## Toking provider integration
 
@@ -39,30 +39,6 @@ Gangram exposes an OpenAI-compatible provider API for Toking at `GET /v1/models`
 These server-to-server requests use Gangram's enabled model catalog and inference connection, but do not create chatbot conversations, deduct local app tokens, redeem codes, or write to the local usage ledger. Toking remains responsible for customer authentication, reservations, and credit settlement. For the POC, Gangram passes through OpenRouter's reported `usage.cost`; a commercial provider price can replace that behavior later.
 
 Gangram does not need its own public URL as an environment variable because it does not currently generate absolute provider links. The URL is deployment configuration on the Toking side. For production, register Gangram there with `baseUrl` set to `https://gangram.ai/v1` and `apiKey` set to one of Gangram's `TOKING_PROVIDER_API_KEYS`.
-
-## Toking customer integration
-
-Signed-in chatbot users connect to Toking by redeeming a Toking gift card. Configure
-the bootstrap `TOKING_REDEMPTION_API_URL`, a `TOKING_CLIENT_API_KEY` with the
-`gift-cards:redeem` scope, and a dedicated `TOKING_CREDENTIAL_SECRET`.
-
-The chatbot sends its stable local user ID to Toking's
-`POST /v1/client/gift-cards/redeem` endpoint. Toking creates one customer wallet
-on the first redemption and credits later cards to that same wallet. Gangram
-encrypts the returned customer API key at rest, loads the model catalog through
-that key, and sends both search-planning completions and user chat completions
-through the gateway `baseUrl` returned by Toking. The gateway URL is not read
-from environment configuration. Gift cards, balances, and inference
-billing are authoritative in Toking while a request uses that route; Gangram
-does not deduct local app credits for a Toking-billed request.
-
-The chat UI exposes one catalog at a time. Users without a connected Toking
-wallet, or whose wallet can no longer reserve credits, see Gangram's enabled
-models and are billed from their Gangram credit balance. A funded wallet shows
-the Toking catalog and is billed by Toking first. If Toking rejects a request for
-insufficient credits, Gangram retries the matching locally provided model once,
-records future requests for that user as Gangram-billed, and keeps using that
-route until another gift-card redemption restores the Toking preference.
 
 Search provider values:
 
@@ -104,8 +80,4 @@ See [Deploy to Debian](docs/deploy-debian.md) for the production setup with Post
 
 ## Future Clients
 
-The web app uses the same JSON API and shared DTO package intended for future iOS, Android, and desktop clients. Session tokens are set as httpOnly cookies for web and also returned from login endpoints so native clients can store and send them as bearer tokens.
-
-## Payments
-
-The Recharge screen integrates with the shared Callcoin payment service. Payments are disabled until configured. See [integration and setup](docs/payment-integration.md) and [required payment-service fixes](docs/payment-service-fixes.md).
+The visitor API uses a private browser cookie to identify a chat session. Native clients can persist and resend that cookie to keep conversation history.
