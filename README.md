@@ -53,8 +53,16 @@ encrypts the returned customer API key at rest, loads the model catalog through
 that key, and sends both search-planning completions and user chat completions
 through the gateway `baseUrl` returned by Toking. The gateway URL is not read
 from environment configuration. Gift cards, balances, and inference
-billing are authoritative in Toking; Gangram does not credit or deduct its local
-app-token balance for this flow.
+billing are authoritative in Toking while a request uses that route; Gangram
+does not deduct local app credits for a Toking-billed request.
+
+The chat UI exposes one catalog at a time. Users without a connected Toking
+wallet, or whose wallet can no longer reserve credits, see Gangram's enabled
+models and are billed from their Gangram credit balance. A funded wallet shows
+the Toking catalog and is billed by Toking first. If Toking rejects a request for
+insufficient credits, Gangram retries the matching locally provided model once,
+records future requests for that user as Gangram-billed, and keeps using that
+route until another gift-card redemption restores the Toking preference.
 
 Search provider values:
 

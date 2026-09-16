@@ -2,14 +2,26 @@ import type { FastifyPluginAsync } from "fastify";
 import { createHash } from "node:crypto";
 import { toModelDto } from "../../lib/mapper.js";
 import { prisma } from "../../lib/prisma.js";
-import { listTokingModels, readTokingConnection, TokingError, tokingHttpStatus, type TokingModel } from "../toking/client.js";
+import { getTokingWallet, listTokingModels, readTokingConnection, TokingError, tokingHttpStatus, type TokingModel } from "../toking/client.js";
 
 export const modelRoutes: FastifyPluginAsync = async (app) => {
   app.get("/models", { preHandler: app.authenticateUser }, async (request, reply) => {
     const user = await prisma.user.findUniqueOrThrow({ where: { id: request.user!.id } });
     try {
       const connection = readTokingConnection(user);
-      if (!connection) return { models: [] };
+      if (!connection) return { models: await listGangramModels() };
+      if (user.tokingCreditsExhausted) return { models: await listGangramModels() };
+      const wallet = await getTokingWallet(connection);
+      if (!wallet.canReserve || BigInt(wallet.availableBalance) <= 0n) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { tokingBalance: wallet.availableBalance, tokingCreditsExhausted: true }
+        });
+        return { models: await listGangramModels() };
+      }
+      if (user.tokingBalance !== wallet.availableBalance) {
+        await prisma.user.update({ where: { id: user.id }, data: { tokingBalance: wallet.availableBalance } });
+      }
       const remoteModels = await listTokingModels(connection);
       const models = await Promise.all(remoteModels.map((model, index) => syncTokingModel(model, index)));
       return { models: models.map(toModelDto) };
@@ -21,6 +33,14 @@ export const modelRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 };
+
+async function listGangramModels() {
+  const models = await prisma.llmModel.findMany({
+    where: { enabled: true, provider: "openrouter" },
+    orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }]
+  });
+  return models.map(toModelDto);
+}
 
 function syncTokingModel(model: TokingModel, sortOrder: number) {
   const id = `toking-${createHash("sha256").update(model.id).digest("hex").slice(0, 24)}`;

@@ -6,7 +6,7 @@ import { toConversationDto, toMessageDto } from "../../lib/mapper.js";
 import { prisma } from "../../lib/prisma.js";
 import { buildAssistantInstructions } from "../context/assistant-instructions.js";
 import { buildExternalSearchContext } from "../context/external-content.js";
-import { estimateTokens, OpenRouterError, streamOpenRouterChat, type LlmChatMessage } from "../llm/openrouter.js";
+import { estimateTokens, OpenRouterError, streamOpenRouterChat, type LlmChatMessage, type StreamResult } from "../llm/openrouter.js";
 import type { SearchResult } from "../search/contracts.js";
 import { SearchError } from "../search/search-error.js";
 import { planSearchAutomatically } from "../search/search-planner.js";
@@ -21,6 +21,13 @@ const chatSchema = z.object({
   searchMode: z.enum(["off", "explicit", "auto"]).optional()
 });
 const defaultConversationTitles = new Set(["New chat", "新建对话"]);
+
+class GangramCreditError extends Error {
+  constructor(message = "Not enough Gangram credits") {
+    super(message);
+    this.name = "GangramCreditError";
+  }
+}
 
 export const chatRoutes: FastifyPluginAsync = async (app) => {
   app.get("/conversations", { preHandler: app.authenticateUser }, async (request) => {
@@ -144,7 +151,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
     const searchMode = resolveSearchMode(input);
     const userId = request.user!.id;
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const model = await prisma.llmModel.findFirst({ where: { id: input.modelId, enabled: true } });
+    const selectedModel = await prisma.llmModel.findFirst({ where: { id: input.modelId, enabled: true } });
     let connection: ReturnType<typeof readTokingConnection>;
     try {
       connection = readTokingConnection(user);
@@ -155,12 +162,28 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       throw error;
     }
 
-    if (!model) return reply.code(404).send({ message: "Model not found" });
-    if (!connection) {
-      return reply.code(402).send({ code: "TOKING_CONNECTION_REQUIRED", message: "Redeem a Toking gift card before chatting" });
+    if (!selectedModel) return reply.code(404).send({ message: "Model not found" });
+
+    const gangramModel = selectedModel.provider === "openrouter"
+      ? selectedModel
+      : await prisma.llmModel.findFirst({
+        where: { enabled: true, provider: "openrouter", providerModelId: selectedModel.providerModelId }
+      });
+    let model = selectedModel;
+    let inferenceConnection = selectedModel.provider === "toking" && !user.tokingCreditsExhausted
+      ? connection ?? undefined
+      : undefined;
+    let billingSystem: "toking" | "gangram" = inferenceConnection ? "toking" : "gangram";
+
+    if (selectedModel.provider !== "toking" && selectedModel.provider !== "openrouter") {
+      return reply.code(400).send({ message: "Unsupported model provider" });
     }
-    if (model.provider !== "toking") {
-      return reply.code(400).send({ message: "Select a model provided by Toking" });
+    if (!inferenceConnection) {
+      if (!gangramModel) return reply.code(404).send({ message: "Gangram does not provide this model" });
+      model = gangramModel;
+      if (user.appTokenBalance < model.minimumRequiredBalance) {
+        return reply.code(402).send({ code: "GANGRAM_INSUFFICIENT_CREDITS", message: "Not enough Gangram credits" });
+      }
     }
     if (searchMode === "explicit" && !(await isPlatformSearchConfigured())) {
       return reply.code(503).send({ message: "The active web search provider is not configured correctly." });
@@ -209,7 +232,7 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         recentMessages: conversationMessages,
         signal: streamAbortController.signal,
         deadline: runDeadline,
-        connection,
+        connection: inferenceConnection,
         plannerModel: model.providerModelId
       });
       const autoSearchPlan = plannerExecution.plan;
@@ -285,25 +308,61 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
       llmMessages.unshift({ role: "system", content: assistantInstructions });
       if (externalContext) llmMessages.splice(1, 0, { role: "system", content: externalContext });
 
-      const stream = streamOpenRouterChat({
+      const streamModelResponse = async () => consumeChatStream(streamOpenRouterChat({
         model: model.providerModelId,
         messages: llmMessages,
         maxTokens: model.maxOutputTokens,
         signal: streamAbortController.signal,
-        connection
+        connection: inferenceConnection
+      }), (delta) => {
+        partialAssistantContent += delta;
+        writeEvent(reply, "delta", { content: delta });
       });
 
-      let result = await stream.next();
-      while (!result.done) {
-        partialAssistantContent += result.value.delta;
-        writeEvent(reply, "delta", { content: result.value.delta });
-        result = await stream.next();
+      let result;
+      try {
+        result = await streamModelResponse();
+      } catch (error) {
+        if (!(error instanceof OpenRouterError) || error.status !== 402 || !inferenceConnection || partialAssistantContent) throw error;
+
+        await prisma.user.update({
+          where: { id: userId },
+          data: { tokingCreditsExhausted: true }
+        });
+        if (!gangramModel) throw new GangramCreditError("Toking credits are insufficient and Gangram does not provide this model");
+        if (user.appTokenBalance < gangramModel.minimumRequiredBalance) throw new GangramCreditError();
+        model = gangramModel;
+        inferenceConnection = undefined;
+        billingSystem = "gangram";
+        result = await streamModelResponse();
       }
 
       const assistantMessage = await prisma.message.create({
-        data: { conversationId: conversation.id, role: "assistant", content: result.value.content, modelId: model.id }
+        data: { conversationId: conversation.id, role: "assistant", content: result.content, modelId: model.id }
       });
+      const inputCharge = billingSystem === "gangram" ? Math.ceil((result.usage.promptTokens / 1000) * model.inputAppTokensPer1k) : 0;
+      const outputCharge = billingSystem === "gangram" ? Math.ceil((result.usage.completionTokens / 1000) * model.outputAppTokensPer1k) : 0;
+      const totalCharge = inputCharge + outputCharge;
+      let updatedBalance: number | undefined;
       await prisma.$transaction(async (tx) => {
+        if (billingSystem === "gangram") {
+          const freshUser = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+          const nextBalance = Math.max(0, freshUser.appTokenBalance - totalCharge);
+          const chargedAmount = freshUser.appTokenBalance - nextBalance;
+          const updatedUser = await tx.user.update({ where: { id: userId }, data: { appTokenBalance: nextBalance } });
+          updatedBalance = updatedUser.appTokenBalance;
+          await tx.appTokenLedger.create({
+            data: {
+              userId,
+              type: "chat_usage",
+              amount: -chargedAmount,
+              balanceAfter: nextBalance,
+              sourceType: "message",
+              sourceId: assistantMessage.id,
+              metadata: { requestedCharge: totalCharge, billingSystem: "gangram" }
+            }
+          });
+        }
         await tx.chatUsageRecord.create({
           data: {
             userId,
@@ -312,14 +371,14 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
             modelId: model.id,
             provider: model.provider,
             providerModelId: model.providerModelId,
-            promptTokens: result.value.usage.promptTokens,
-            completionTokens: result.value.usage.completionTokens,
-            totalTokens: result.value.usage.totalTokens,
-            inputAppTokensCharged: 0,
-            outputAppTokensCharged: 0,
-            totalAppTokensCharged: 0,
-            openrouterGenerationId: result.value.generationId,
-            openrouterCost: result.value.cost
+            promptTokens: result.usage.promptTokens,
+            completionTokens: result.usage.completionTokens,
+            totalTokens: result.usage.totalTokens,
+            inputAppTokensCharged: inputCharge,
+            outputAppTokensCharged: outputCharge,
+            totalAppTokensCharged: totalCharge,
+            openrouterGenerationId: result.generationId,
+            openrouterCost: result.cost
           }
         });
         await tx.conversation.update({
@@ -335,10 +394,10 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         run_id: runId,
         search_mode: searchMode,
         search_source_count: searchResults.length,
-        prompt_tokens: result.value.usage.promptTokens,
-        completion_tokens: result.value.usage.completionTokens,
-        total_tokens: result.value.usage.totalTokens,
-        billing_system: "toking",
+        prompt_tokens: result.usage.promptTokens,
+        completion_tokens: result.usage.completionTokens,
+        total_tokens: result.usage.totalTokens,
+        billing_system: billingSystem,
         response_time_ms: Date.now() - startedAt
       });
 
@@ -346,9 +405,9 @@ export const chatRoutes: FastifyPluginAsync = async (app) => {
         message: toMessageDto(assistantMessage),
         sources: searchResults,
         usage: {
-          ...result.value.usage,
-          totalAppTokensCharged: 0,
-          tokingBalance: user.tokingBalance
+          ...result.usage,
+          totalAppTokensCharged: totalCharge,
+          ...(billingSystem === "gangram" ? { updatedBalance } : { tokingBalance: user.tokingBalance })
         }
       });
       reply.raw.end();
@@ -455,6 +514,18 @@ function writeEvent(reply: { raw: NodeJS.WritableStream }, event: string, data: 
   reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
+async function consumeChatStream(
+  stream: ReturnType<typeof streamOpenRouterChat>,
+  onDelta: (delta: string) => void
+): Promise<StreamResult> {
+  let result = await stream.next();
+  while (!result.done) {
+    onDelta(result.value.delta);
+    result = await stream.next();
+  }
+  return result.value;
+}
+
 function safeHostname(value: string) {
   try {
     return new URL(value).hostname;
@@ -476,6 +547,9 @@ function trimMessages(messages: LlmChatMessage[], maxTokens: number) {
 }
 
 function toChatStreamError(error: unknown) {
+  if (error instanceof GangramCreditError) {
+    return { code: "GANGRAM_INSUFFICIENT_CREDITS", message: error.message };
+  }
   if (error instanceof SearchError) {
     return {
       code: `SEARCH_${error.code.toUpperCase()}`,

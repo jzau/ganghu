@@ -75,6 +75,7 @@ test("redeems through the persistent Toking client identity and saves the first 
   assert.equal(updateData?.tokingCreditAccountId, "account-1");
   assert.equal(updateData?.tokingBaseUrl, "https://api.example.test/v1");
   assert.equal(updateData?.tokingBalance, "2000");
+  assert.equal(updateData?.tokingCreditsExhausted, false);
   assert.equal(decryptCredential(String(updateData?.tokingApiKeyEncrypted)), "tk_live_customer_secret");
 });
 
@@ -118,5 +119,6 @@ test("a later redemption preserves the saved customer key while topping up the s
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().balanceAfter, "5000");
   assert.equal(updateData?.tokingCreditAccountId, "account-1");
+  assert.equal(updateData?.tokingCreditsExhausted, false);
   assert.equal("tokingApiKeyEncrypted" in (updateData ?? {}), false);
 });

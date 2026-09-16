@@ -18,6 +18,7 @@ model User {
   tokingApiKeyPrefix String?                 @map("toking_api_key_prefix")
   tokingBaseUrl      String?                 @map("toking_base_url")
   tokingBalance      String?                 @map("toking_balance")
+  tokingCreditsExhausted Boolean             @default(false) @map("toking_credits_exhausted")
   status             UserStatus             @default(active)
   createdAt          DateTime               @default(now()) @map("created_at")
   updatedAt          DateTime               @updatedAt @map("updated_at")

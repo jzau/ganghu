@@ -494,6 +494,7 @@ export function ChatPage() {
           if (event === "delta") setStreamingText((current) => current + data.content);
           if (event === "error") {
             serverSentErrorEvent = true;
+            queryClient.invalidateQueries({ queryKey: ["models"] });
             throw new Error(data.message ?? t.chatFailed);
           }
           if (event === "done") {
@@ -503,6 +504,7 @@ export function ChatPage() {
             setStreamingText("");
             setIsSending(false);
             queryClient.invalidateQueries({ queryKey: ["me"] });
+            queryClient.invalidateQueries({ queryKey: ["models"] });
             queryClient.invalidateQueries({ queryKey: ["conversations"] });
             setPendingUserMessage((pending) => pending ? { ...pending, conversationId: data.message.conversationId } : pending);
             queryClient.invalidateQueries({ queryKey: ["messages", data.message.conversationId] });

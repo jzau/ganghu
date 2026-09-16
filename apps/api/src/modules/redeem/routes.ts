@@ -44,6 +44,7 @@ export const redeemRoutes: FastifyPluginAsync = async (app) => {
             tokingCreditAccountId: redemption.creditAccountId,
             tokingBaseUrl: baseUrl,
             tokingBalance: redemption.balanceAfter,
+            tokingCreditsExhausted: false,
             ...(redemption.apiKey ? {
               tokingApiKeyEncrypted: encryptCredential(redemption.apiKey),
               tokingApiKeyPrefix: redemption.apiKeyPrefix ?? null
