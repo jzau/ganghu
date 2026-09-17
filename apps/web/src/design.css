@@ -24,8 +24,8 @@ svg.lucide,svg.lucide :where(path,circle,rect,line,polyline,polygon,ellipse) { s
 .nm-sidebar-top svg,.nm-sidebar > .nm-action svg { stroke-width:2px; }
 .nm-action,.nm-account,.nm-icon-button,.nm-model-button { background: transparent; box-shadow: none; border: 0; font-weight: 400; }
 .nm-action { min-height: 36px; height: 36px; border-radius: 10px; padding: 0 12px; gap: 10px; font-size: 14px; color: rgba(0,0,0,.72); }
-.nm-action:hover,.nm-account:hover,.nm-icon-button:hover,.nm-model-button:hover,.nm-history-item:hover,.nm-account-menu-item:hover { background: linear-gradient(135deg,rgba(255,255,255,.7),rgba(214,227,251,.5)); box-shadow: none; }
-.nm-action:active,.nm-icon-button:active,.nm-model-button.is-open { box-shadow: none; background: #eef4fe; }
+.nm-action:hover,.nm-account:hover,.nm-icon-button:hover,.nm-history-item:hover,.nm-account-menu-item:hover { background: linear-gradient(135deg,rgba(255,255,255,.7),rgba(214,227,251,.5)); box-shadow: none; }
+.nm-action:active,.nm-icon-button:active { box-shadow: none; background: #eef4fe; }
 .nm-section-label { margin-top: 16px; padding: 0 12px 6px; font-size: 12px; line-height: 16px; font-weight: 500; color: rgba(0,0,0,.55); letter-spacing: 0; text-transform: uppercase; }
 .nm-history { padding: 0; margin: 0; }
 .nm-history-item { min-height: 36px; margin-bottom: 2px; border-radius: 10px; padding: 8px 12px; font-size: 14px; font-weight: 400; background: transparent; box-shadow: none; color: rgba(0,0,0,.72); }
@@ -46,6 +46,8 @@ svg.lucide,svg.lucide :where(path,circle,rect,line,polyline,polygon,ellipse) { s
 .nm-empty-description { margin-top: 8px; max-width: 384px; font-size: 14px; line-height: 20px; color: rgba(0,0,0,.72); }
 .nm-bubble { box-shadow: none; background: transparent; font-size: 14px; line-height: 24px; color: rgba(0,0,0,.9); }
 .nm-message.is-assistant { width: 100%; }
+.nm-chat-page .nm-message { flex-direction: column; gap: 0; }
+.nm-chat-page .nm-message.is-user { align-items: flex-end; }
 .nm-message.is-assistant .nm-bubble { padding: 0; width: 100%; }
 .nm-message.is-user { max-width: 85%; }
 .nm-message.is-user .nm-bubble { background: #eef0f4; border-radius: 20px; box-shadow: none; padding: 10px 16px; line-height: 20px; }
@@ -62,7 +64,7 @@ svg.lucide,svg.lucide :where(path,circle,rect,line,polyline,polygon,ellipse) { s
 .nm-input { height: 40px; min-height: 40px; padding: 14px 20px 4px; font-size: 14px; line-height: 20px; color: rgba(0,0,0,.72); }
 .nm-input::placeholder { font-size: 14px; line-height: 20px; color: rgba(0,0,0,.22); }
 .nm-composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 10px 10px; min-height: 50px; }
-.nm-model-button { height: 36px; min-height: 36px; padding: 6px 10px; border-radius: 18px; gap: 6px; max-width: 100%; }
+.nm-model-button,.nm-model-button:hover,.nm-model-button:active,.nm-model-button.is-open,.nm-model-button:disabled { height: 36px; min-height: 36px; padding: 6px 10px; border-radius: 18px; gap: 6px; max-width: 100%; background: transparent; box-shadow: none; }
 .nm-model-button .text-sm { font-size: 12px; line-height: 16px; font-weight: 500; color: #0b1d46; }
 .nm-model-button .text-\[11px\] { display: none; }
 .nm-model-button .nm-model-logo { width: 16px; height: 16px; min-width: 16px; border-radius: 4px; box-shadow: none; }

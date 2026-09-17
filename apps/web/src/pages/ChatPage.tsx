@@ -41,7 +41,6 @@ const chatText = {
     shareCopied: "Share link copied successfully",
     shareFailed: "Could not create share link",
     streamInterrupted: "Response was interrupted. Refreshing conversation.",
-    modelLocked: "Model is locked for this conversation",
     deleteConversationTitle: "Delete conversation?",
     deleteConversationBody: "This conversation will be permanently deleted.",
     cancel: "Cancel",
@@ -75,7 +74,6 @@ const chatText = {
     shareCopied: "分享链接复制成功",
     shareFailed: "无法创建分享链接",
     streamInterrupted: "回复已中断，正在刷新对话。",
-    modelLocked: "此对话已锁定模型",
     deleteConversationTitle: "删除对话？",
     deleteConversationBody: "此对话将被永久删除。",
     cancel: "取消",
@@ -324,15 +322,9 @@ export function ChatPage() {
 
   const persistedMessages = messages.data?.messages ?? [];
   const conversationModelId = [...persistedMessages].reverse().find((message) => message.role === "assistant" && message.modelId)?.modelId ?? null;
-  const hasPendingMessage =
-    pendingUserMessage &&
-    pendingUserMessage.conversationId === activeConversationId;
   const isActiveConversationSending = isSending && streamingConversationId === activeConversationId;
   const conversationIsLoading = Boolean(activeConversationId && messages.isLoading);
-  const modelSelectionLocked =
-    conversationIsLoading ||
-    Boolean(hasPendingMessage) ||
-    isSending;
+  const modelSelectionLocked = isSending;
   const selectedModel = models.data?.models.find((model) => model.id === modelId) ?? models.data?.models[0];
   const modelGroups = useMemo(() => {
     const groups = new Map<string, LlmModelDto[]>();
@@ -768,6 +760,7 @@ export function ChatPage() {
                             role="menuitemradio"
                             aria-checked={model.id === modelId}
                             onClick={() => {
+                              initializedModelConversation.current = activeConversationId;
                               setModelId(model.id);
                               setModelMenuOpen(false);
                             }}
