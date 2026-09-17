@@ -4,6 +4,7 @@ import { appNames } from "./branding";
 export type Language = "en" | "zh";
 
 const languageKey = "ganghu-language";
+const selectedLanguageKey = "ganghu-selected-language";
 export { appNames } from "./branding";
 
 export const languageLabels: Record<Language, string> = {
@@ -13,6 +14,15 @@ export const languageLabels: Record<Language, string> = {
 
 export function getInitialLanguage(): Language {
   if (typeof window === "undefined") return "en";
+
+  const selectedLanguage = window.localStorage.getItem(selectedLanguageKey);
+  if (selectedLanguage === "en" || selectedLanguage === "zh") return selectedLanguage;
+
+  // Android WebView's browser locale can differ from the device/app locale.
+  const nativeLanguage = (window as Window & {
+    GangramNative?: { getDeviceLanguage?: () => string };
+  }).GangramNative?.getDeviceLanguage?.();
+  if (nativeLanguage) return nativeLanguage.toLowerCase().startsWith("zh") ? "zh" : "en";
 
   const savedLanguage = window.localStorage.getItem(languageKey);
   if (savedLanguage === "en" || savedLanguage === "zh") return savedLanguage;
@@ -35,6 +45,7 @@ export function useLanguage() {
   }, [language]);
 
   function setLanguage(nextLanguage: Language) {
+    window.localStorage.setItem(selectedLanguageKey, nextLanguage);
     setLanguageState(nextLanguage);
   }
 
