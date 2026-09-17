@@ -81,6 +81,7 @@ svg.lucide,svg.lucide :where(path,circle,rect,line,polyline,polygon,ellipse) { s
 .nm-model-menu { top:auto; bottom:calc(100% + 12px); width:232px; min-width:232px; max-width:min(232px,calc(100vw - 40px)); max-height:min(720px,calc(100dvh - 96px)); gap:0; padding:10px 9px 11px; overflow-y:auto; border-radius:20px; }
 .nm-model-option,.nm-model-submenu-option { min-height:56px; padding:8px 10px; background:transparent; box-shadow:none; border-radius:16px; font-size:14px; font-weight:400; }
 .nm-model-option .text-\[11px\] { margin-top:2px; font-size:12px; line-height:18px; }
+.nm-model-option:hover:not(.is-active),.nm-model-option:active:not(.is-active) { background: rgba(126,159,216,.08); box-shadow: none; }
 .nm-model-option.is-active,.nm-model-submenu-option.is-active { background: #eef4fe; box-shadow: none; }
 .nm-account-menu-item { font-weight: 400; }
 .nm-modal-backdrop { background: rgba(26,31,42,.1); backdrop-filter: blur(5px); }
