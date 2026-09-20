@@ -15,5 +15,9 @@ export const appNames: Record<Language, string> = {
 };
 
 export function brandText(text: string, language: Language) {
-  return text.replaceAll("GANGHU AI", appNames[language]);
+  const appName = appNames[language];
+  return text
+    .replaceAll("GANGHU AI", appName)
+    .replaceAll("GANGRAM", appName)
+    .replaceAll("Gangram", appName);
 }

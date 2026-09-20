@@ -10,7 +10,7 @@ import { Button } from "../components/Button";
 import { SearchDialog } from "../components/SearchDialog";
 import { SettingsDialog } from "../components/SettingsDialog";
 import { api, endpoints } from "../lib/api";
-import { localizeErrorMessage, useLanguage, type Language } from "../lib/i18n";
+import { appNames, localizeErrorMessage, useLanguage, type Language } from "../lib/i18n";
 
 const chatText = {
   en: {
@@ -670,7 +670,7 @@ export function ChatPage() {
               <div className="nm-message-column">
                 {allMessages.length === 0 && (
                   <div className="nm-empty">
-                    <p className="nm-empty-eyebrow">GANGRAM</p>
+                    <p className="nm-empty-eyebrow">{appNames[language]}</p>
                     <h1>{activeConversationId ? activeConversationTitle : language === "en" ? "Ask anything." : "有什么想问的？"}</h1>
                     <p className="nm-empty-description">{t.emptyHint}</p>
                   </div>
@@ -695,7 +695,7 @@ export function ChatPage() {
                     </div>
                   </div>
                 )}
-                {allMessages.length > 0 && <p className="gg-chat-disclaimer">Gangram can make mistakes. Check important info.</p>}
+                {allMessages.length > 0 && <p className="gg-chat-disclaimer">{language === "en" ? "Gangram can make mistakes. Check important info." : "工夫 AI 可能会出错，请核实重要信息。"}</p>}
                 <div ref={messagesEndRef} aria-hidden="true" />
               </div>
             </div>

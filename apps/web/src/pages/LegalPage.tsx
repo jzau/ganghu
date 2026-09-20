@@ -204,7 +204,7 @@ export function LegalContent({ kind, language }: { kind: LegalPageKind; language
           {section.body.map((paragraph) => <p key={paragraph}>{brandText(paragraph, language)}</p>)}
         </section>
       ))}
-      <footer>GANGRAM · <a href="mailto:support@gangram.com">support@gangram.com</a></footer>
+      <footer>{brandText("GANGRAM", language)} · <a href="mailto:support@gangram.com">support@gangram.com</a></footer>
     </div>
   );
 }
