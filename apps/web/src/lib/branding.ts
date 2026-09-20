@@ -1,7 +1,7 @@
 import type { Language } from "./i18n";
 
 const defaultAppNames: Record<Language, string> = {
-  en: "GANGHU AI",
+  en: "GANGRAM",
   zh: "工夫 AI"
 };
 
