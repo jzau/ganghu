@@ -106,7 +106,14 @@ svg.lucide,svg.lucide :where(path,circle,rect,line,polyline,polygon,ellipse) { s
   .nm-chat-page .nm-chat-header { top: 12px; left: 12px; right: 16px; }
   .nm-messages { margin: 0; padding: 56px 16px 24px; }
   .nm-model-button { max-width: calc(100vw - 110px); }
-  .nm-model-menu { width: min(300px,calc(100vw - 54px)); }
+  .nm-model-menu {
+    left: 0;
+    box-sizing: border-box;
+    width: min(300px,calc(100vw - 54px));
+    min-width: 0;
+    max-width: calc(100vw - 54px);
+    max-height: min(60dvh,calc(100dvh - 150px));
+  }
   .nm-model-submenu { left: 0; top: auto; bottom: 100%; width: 100%; }
   .nm-shared-shell .nm-chat { padding: 16px; }
 }
