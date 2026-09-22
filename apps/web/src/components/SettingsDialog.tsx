@@ -75,17 +75,15 @@ export function SettingsDialog({ language, onLanguageChange, user, initialSectio
             {section === "profile" && <ProfilePanel language={language} user={user} onAccountDeleted={onAccountDeleted} />}
             {section === "credits" && <PaymentsPanel language={language} user={user} />}
             {section === "tokens" && <>
-              <Balance
+              {user.tokingConnected && <Balance
                 label={language === "en" ? "Toking connection" : "Toking 连接"}
-                value={!user.tokingConnected
-                  ? (language === "en" ? "Not connected" : "未连接")
-                  : user.tokingBalance === null
+                value={user.tokingBalance === null
                     ? (language === "en" ? "Connected" : "已连接")
                     : formatCredits(user.tokingBalance)}
-                unit={!user.tokingConnected || user.tokingBalance === null
+                unit={user.tokingBalance === null
                   ? ""
                   : (language === "en" ? "credits · last known balance" : "积分 · 最近余额")}
-              />
+              />}
               <div className="gg-redeem-panel">{redeem}</div>
             </>}
             {section === "usage" && <PaymentUsagePanel language={language} userId={user.id} tokingConnected={user.tokingConnected} />}
