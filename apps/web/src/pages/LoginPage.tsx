@@ -30,6 +30,7 @@ export function LoginPage() {
           onSuccess={async () => {
             await Promise.all([
               queryClient.invalidateQueries({ queryKey: ["me"] }),
+              queryClient.invalidateQueries({ queryKey: ["models"] }),
               queryClient.invalidateQueries({ queryKey: ["conversations"] })
             ]);
             navigate(returnTo, { replace: true });

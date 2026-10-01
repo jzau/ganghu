@@ -9,6 +9,7 @@ import { BrandLockup } from "../components/BrandLockup";
 import { Button } from "../components/Button";
 import { SettingsDialog } from "../components/SettingsDialog";
 import { SearchDialog } from "../components/SearchDialog";
+import { ModelPicker } from "../components/ModelPicker";
 import { api, endpoints } from "../lib/api";
 import { commonText, localizeErrorMessage, useLanguage, type Language } from "../lib/i18n";
 import { maskPhone } from "../lib/phone";
@@ -67,9 +68,9 @@ const chatText = {
     models: "模型",
     modelCount: (count: number) => `${count} 个模型`,
     startConversation: "开始对话",
-    emptyHint: "选择模型并发送消息。",
+    emptyHint: "提问、探索，在同一段对话中自由切换领先的 AI 模型。",
     thinking: "助手正在思考",
-    messagePlaceholder: "输入消息",
+    messagePlaceholder: "想问什么都可以。保留上下文，自由切换模型。",
     sendMessage: "发送消息",
     stopResponse: "停止回复",
     redeemCode: "兑换码",
@@ -144,10 +145,6 @@ function getModelTriggerName(model: LlmModelDto | undefined, language: Language)
   const variant = getModelSubtitle(model, language);
   if (!name || !variant) return name || variant;
   return variant.toLowerCase().startsWith(name.toLowerCase()) ? variant : `${name} ${variant}`;
-}
-
-function getModelGroupKey(model: LlmModelDto) {
-  return `${model.provider}:${model.displayName.trim().toLowerCase()}`;
 }
 
 function ModelLogo({ model, size = "md" }: { model?: ModelLogoData; size?: "sm" | "md" }) {
@@ -252,7 +249,7 @@ export function ChatPage() {
   const [revealedDeleteConversationId, setRevealedDeleteConversationId] = useState<string | null>(null);
 
   const me = useQuery({ queryKey: ["me"], queryFn: endpoints.me, retry: false });
-  const models = useQuery({ queryKey: ["models"], queryFn: endpoints.models, enabled: me.isSuccess });
+  const models = useQuery({ queryKey: ["models", me.data?.user.id ?? "public"], queryFn: endpoints.models });
   const conversations = useQuery({ queryKey: ["conversations"], queryFn: endpoints.conversations, enabled: me.isSuccess });
   const messages = useQuery({
     queryKey: ["messages", activeConversationId],
@@ -291,7 +288,30 @@ export function ChatPage() {
   useEffect(() => {
     document.documentElement.classList.add("nm-chat-document");
     document.body.classList.add("nm-chat-body");
+    const viewport = window.visualViewport;
+    const updateViewport = () => {
+      // iOS keeps 100dvh at the layout viewport height when its keyboard opens.
+      // Follow the visible viewport without restricting the user's pinch zoom.
+      const mobile = window.matchMedia("(max-width: 767px)").matches;
+      const root = document.documentElement;
+      if (mobile && viewport && viewport.scale === 1) {
+        root.style.setProperty("--gg-visible-height", `${viewport.height}px`);
+        root.style.setProperty("--gg-visible-top", `${viewport.offsetTop}px`);
+      } else {
+        root.style.removeProperty("--gg-visible-height");
+        root.style.removeProperty("--gg-visible-top");
+      }
+    };
+    updateViewport();
+    viewport?.addEventListener("resize", updateViewport);
+    viewport?.addEventListener("scroll", updateViewport);
+    window.addEventListener("resize", updateViewport);
     return () => {
+      viewport?.removeEventListener("resize", updateViewport);
+      viewport?.removeEventListener("scroll", updateViewport);
+      window.removeEventListener("resize", updateViewport);
+      document.documentElement.style.removeProperty("--gg-visible-height");
+      document.documentElement.style.removeProperty("--gg-visible-top");
       document.documentElement.classList.remove("nm-chat-document");
       document.body.classList.remove("nm-chat-body");
     };
@@ -349,14 +369,6 @@ export function ChatPage() {
     Boolean(hasPendingMessage) ||
     isSending;
   const selectedModel = models.data?.models.find((model) => model.id === modelId) ?? models.data?.models[0];
-  const modelGroups = useMemo(() => {
-    const groups = new Map<string, LlmModelDto[]>();
-    for (const model of models.data?.models ?? []) {
-      const key = getModelGroupKey(model);
-      groups.set(key, [...(groups.get(key) ?? []), model]);
-    }
-    return Array.from(groups, ([key, groupModels]) => ({ key, models: groupModels }));
-  }, [models.data?.models]);
   const phoneNumber = me.data?.user.phoneNumber ?? "";
   const isAuthenticated = me.isSuccess;
   const visibleConversations = isAuthenticated
@@ -391,7 +403,7 @@ export function ChatPage() {
   }, [modelSelectionLocked]);
 
   useEffect(() => {
-    if (!accountMenuOpen && !modelMenuOpen && !revealedDeleteConversationId) return;
+    if (!accountMenuOpen && !revealedDeleteConversationId) return;
 
     function closeMenusOnOutsidePointer(event: PointerEvent) {
       const target = event.target;
@@ -406,7 +418,7 @@ export function ChatPage() {
 
     document.addEventListener("pointerdown", closeMenusOnOutsidePointer);
     return () => document.removeEventListener("pointerdown", closeMenusOnOutsidePointer);
-  }, [accountMenuOpen, modelMenuOpen, revealedDeleteConversationId]);
+  }, [accountMenuOpen, revealedDeleteConversationId]);
 
   useEffect(() => {
     if (!activeConversationId) return;
@@ -625,8 +637,9 @@ export function ChatPage() {
                 <Search size={14} />
               </button>
               <button
-                className="nm-icon-button nm-sidebar-toggle hidden md:grid"
+                className="nm-icon-button nm-sidebar-toggle"
                 onClick={() => {
+                  if (window.matchMedia("(max-width: 767px)").matches) { setSidebarOpen(false); return; }
                   setSidebarCollapsed((collapsed) => !collapsed);
                   setAccountMenuOpen(false);
                   setAccountMenuView("main");
@@ -723,7 +736,9 @@ export function ChatPage() {
                   onClose={() => { setAccountMenuOpen(false); setAccountMenuView("main"); }}
                   redeem={<RedeemCodeMenu language={language} />}
                   onLogout={async () => {
-                        await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+                        await api("/api/auth/logout", { method: "POST" });
+                        streamAbortControllerRef.current?.abort();
+                        setIsSending(false);
                         setActiveConversationId("");
                         setPendingUserMessage(null);
                         setCompletedAssistantMessage(null);
@@ -731,6 +746,8 @@ export function ChatPage() {
                         navigate("/");
                         setAccountMenuOpen(false);
                         setAccountMenuView("main");
+                        setSidebarOpen(false);
+                        queryClient.removeQueries({ queryKey: ["models"] });
                         queryClient.removeQueries({ queryKey: ["conversations"] });
                         queryClient.removeQueries({ queryKey: ["messages"] });
                         queryClient.resetQueries({ queryKey: ["me"] });
@@ -844,42 +861,28 @@ export function ChatPage() {
                     if (!modelSelectionLocked) setModelMenuOpen((open) => !open);
                   }}
                   disabled={modelSelectionLocked}
+                  aria-haspopup="listbox"
+                  aria-expanded={modelMenuOpen}
                   title={modelSelectionLocked ? undefined : t.selectModel}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" className="composer-control-icon shrink-0" aria-hidden="true">
                     <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z" />
                     <path d="M20 3v4M22 5h-4" />
                   </svg>
-                  <span className="min-w-0 truncate text-left text-sm font-medium">{getModelTriggerName(selectedModel, language) ?? t.selectModel}</span>
+                  <span className="min-w-0 truncate text-left text-sm font-medium">{getModelTriggerName(selectedModel, language) ?? (models.isPending ? t.modelsLoading : t.selectModel)}</span>
                   {!modelSelectionLocked && <ChevronDown size={12} className="shrink-0 opacity-50" />}
                 </button>
-                {modelMenuOpen && !modelSelectionLocked && (
-                  <div
-                    className={`nm-model-menu ${scrollingAreas.modelMenu ? "is-scrolling" : ""}`}
-                    role="menu"
-                    aria-label={t.models}
-                    onScroll={() => markScrolling("modelMenu")}
-                  >
-                    {modelGroups.flatMap((group) => group.models).map((model) => (
-                          <button
-                            key={model.id}
-                            className={`nm-model-option ${model.id === modelId ? "is-active" : ""}`}
-                            role="menuitemradio"
-                            aria-checked={model.id === modelId}
-                            onClick={() => {
-                              setModelId(model.id);
-                              setModelMenuOpen(false);
-                            }}
-                          >
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate font-medium">{getModelDisplayName(model, language)}</span>
-                              <span className="block truncate text-[11px] text-[#808080]">{getModelSubtitle(model, language)}</span>
-                            </span>
-                            {model.id === modelId && <Check size={15} />}
-                          </button>
-                    ))}
-                  </div>
-                )}
+                {modelMenuOpen && !modelSelectionLocked && <ModelPicker
+                  anchorRef={modelMenuRef}
+                  models={models.data?.models ?? []}
+                  selectedId={modelId}
+                  language={language}
+                  loading={models.isPending}
+                  failed={models.isError}
+                  onRetry={() => void models.refetch()}
+                  onSelect={setModelId}
+                  onClose={() => setModelMenuOpen(false)}
+                />}
               </div>
                 <button
                   className="gg-web-toggle"

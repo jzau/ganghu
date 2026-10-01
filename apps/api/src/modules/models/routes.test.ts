@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import Fastify from "fastify";
+import cookie from "@fastify/cookie";
+import { authPlugin } from "../../plugins/auth.js";
 import { encryptCredential } from "../../lib/crypto.js";
 import { prisma } from "../../lib/prisma.js";
 import { modelRoutes } from "./routes.js";
@@ -31,10 +33,71 @@ function stub(t: TestContext, target: object, key: string, replacement: unknown)
 
 async function buildApp() {
   const app = Fastify();
-  app.decorate("authenticateUser", async (request: { user?: unknown }) => { request.user = { id: "user-1" }; });
+  app.decorate("optionalAuthenticateUser", async (request: { user?: unknown }) => { request.user = { id: "user-1" }; });
   await app.register(modelRoutes);
   return app;
 }
+
+test("guests can read the public catalog without opening protected routes", async (t) => {
+  let catalogQuery: unknown;
+  stub(t, prisma.user, "findUniqueOrThrow", async () => { throw new Error("Guest must not load a wallet"); });
+  stub(t, prisma.llmModel, "findMany", async (input: unknown) => { catalogQuery = input; return [localModel]; });
+  const app = Fastify();
+  await app.register(cookie);
+  await app.register(authPlugin);
+  await app.register(modelRoutes);
+  app.get("/protected", { preHandler: app.authenticateUser }, async () => ({ ok: true }));
+  t.after(() => app.close());
+
+  const response = await app.inject({ url: "/models" });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers["cache-control"], "private, no-store");
+  assert.deepEqual(response.json().models.map((model: { id: string }) => model.id), [localModel.id]);
+  assert.deepEqual(catalogQuery, {
+    where: { enabled: true, provider: "openrouter" },
+    orderBy: [{ sortOrder: "asc" }, { displayName: "asc" }]
+  });
+  assert.equal((await app.inject({ url: "/protected" })).statusCode, 401);
+});
+
+test("invalid, expired and inactive sessions receive only the public catalog", async (t) => {
+  let session: unknown = null;
+  stub(t, prisma.userSession, "findUnique", async () => session);
+  stub(t, prisma.user, "findUniqueOrThrow", async () => { throw new Error("Invalid session must not load a wallet"); });
+  stub(t, prisma.llmModel, "findMany", async () => [localModel]);
+  const app = Fastify();
+  await app.register(cookie);
+  await app.register(authPlugin);
+  await app.register(modelRoutes);
+  t.after(() => app.close());
+  for (const candidate of [null,
+    { userId: "user-1", expiresAt: new Date(0), user: { status: "active" } },
+    { userId: "user-1", expiresAt: new Date(Date.now() + 60_000), user: { status: "suspended" } }
+  ]) {
+    session = candidate;
+    const response = await app.inject({ url: "/models", cookies: { user_session: "stale-session" } });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().models[0].provider, "openrouter");
+  }
+});
+
+test("a valid session still selects the authenticated catalog", async (t) => {
+  let userQuery: unknown;
+  stub(t, prisma.userSession, "findUnique", async () => ({ userId: "user-1", expiresAt: new Date(Date.now() + 60_000), user: { status: "active" } }));
+  stub(t, prisma.user, "findUniqueOrThrow", async (input: unknown) => {
+    userQuery = input;
+    return { id: "user-1", tokingApiKeyEncrypted: null, tokingBaseUrl: null };
+  });
+  stub(t, prisma.llmModel, "findMany", async () => [localModel]);
+  const app = Fastify();
+  await app.register(cookie);
+  await app.register(authPlugin);
+  await app.register(modelRoutes);
+  t.after(() => app.close());
+  const response = await app.inject({ url: "/models", cookies: { user_session: "valid-session" } });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(userQuery, { where: { id: "user-1" } });
+});
 
 test("returns only Gangram models before a user connects Toking", async (t) => {
   stub(t, prisma.user, "findUniqueOrThrow", async () => ({

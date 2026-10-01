@@ -1,6 +1,6 @@
 import type { FormEvent, ReactNode } from "react";
-import { useEffect, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { Check, ChevronDown, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { brandText } from "../lib/branding";
@@ -68,6 +68,22 @@ export function LoginForm({
   const [sending, setSending] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const [countryMenuOpen, setCountryMenuOpen] = useState(false);
+  const countryMenu = useRef<HTMLDivElement>(null);
+  const formId = useId();
+
+  useEffect(() => {
+    if (!countryMenuOpen) return;
+    const close = (event: PointerEvent) => {
+      if (event.target instanceof Node && !countryMenu.current?.contains(event.target)) setCountryMenuOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setCountryMenuOpen(false); countryMenu.current?.querySelector("button")?.focus(); }
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", escape); };
+  }, [countryMenuOpen]);
 
   useEffect(() => {
     if (countdown <= 0) return;
@@ -111,7 +127,7 @@ export function LoginForm({
   async function verifyOtp() {
     setError("");
     if (!validatePhoneNumber()) return;
-    if (otp.trim().length < 4) {
+    if (otp.trim().length !== 6) {
       setError(t.invalidOtp);
       return;
     }
@@ -133,30 +149,32 @@ export function LoginForm({
   return (
     <form className="gg-login-form" onSubmit={submitLogin}>
       {header}
-      <div className="gg-login-field-group"><label>{t.countryRegion}</label>
-      <div className="nm-select-wrap">
-        <select
-          className="nm-field nm-select-field"
-          value={countryCode}
-          onChange={(event) => {
-            setCountryCode(event.target.value as CountryCode);
-            setPhoneNumber("");
-            setOtp("");
-            setError("");
-          }}
-        >
-          {supportedCountries.map((item) => (
-            <option key={item.code} value={item.code}>
-              {item.label[language]} ({item.code})
-            </option>
-          ))}
-        </select>
-        <ChevronDown className="nm-select-chevron" size={18} aria-hidden="true" />
+      <div className="gg-login-field-group"><label id={`${formId}-country-label`}>{t.countryRegion}</label>
+      <div className="gg-country-picker" ref={countryMenu}>
+        <button type="button" className="nm-field gg-country-trigger" aria-labelledby={`${formId}-country-label`} aria-haspopup="listbox" aria-expanded={countryMenuOpen}
+          onClick={() => setCountryMenuOpen((open) => !open)} onKeyDown={(event) => {
+            if (event.key === "ArrowDown") { event.preventDefault(); setCountryMenuOpen(true); requestAnimationFrame(() => countryMenu.current?.querySelector<HTMLButtonElement>('[role="option"]')?.focus()); }
+          }}>
+          <span>{country.label[language]} ({countryCode})</span><ChevronDown size={14} aria-hidden="true" />
+        </button>
+        {countryMenuOpen && <div className="gg-country-options" role="listbox" aria-labelledby={`${formId}-country-label`} onKeyDown={(event) => {
+          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const options = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
+          const index = options.indexOf(document.activeElement as HTMLButtonElement);
+          const next = event.key === "Home" ? 0 : event.key === "End" ? options.length - 1 : (index + (event.key === "ArrowDown" ? 1 : options.length - 1)) % options.length;
+          options[next]?.focus();
+        }}>{supportedCountries.map((item) => <button type="button" key={item.code} role="option" aria-selected={countryCode === item.code} onClick={() => {
+          setCountryCode(item.code); setPhoneNumber(""); setOtp(""); setError(""); setCountryMenuOpen(false); countryMenu.current?.querySelector("button")?.focus();
+        }}><span>{item.label[language]} ({item.code})</span>{countryCode === item.code && <Check size={16} />}</button>)}</div>}
       </div></div>
-      <div className="gg-login-field-group"><label>{t.phoneNumber}</label>
+      <div className="gg-login-field-group"><label htmlFor={`${formId}-phone`}>{t.phoneNumber}</label>
       <div className="gg-login-phone-row">
         <div className="nm-field gg-login-prefix">{countryCode}</div>
+        <div className="gg-login-phone-input">
         <input
+          id={`${formId}-phone`}
+          type="tel"
           className="nm-field"
           inputMode="tel"
           autoComplete="tel-national"
@@ -167,10 +185,13 @@ export function LoginForm({
           }}
           placeholder={country.hint}
         />
+        {phoneNumber && <button type="button" className="gg-phone-clear" aria-label={language === "en" ? "Clear phone number" : "清除手机号"} onClick={() => { setPhoneNumber(""); setError(""); document.getElementById(`${formId}-phone`)?.focus(); }}><X size={14} /></button>}
+        </div>
       </div></div>
-      <div className="gg-login-field-group"><label>{language === "en" ? "Verification code" : "验证码"}</label>
+      <div className="gg-login-field-group"><label htmlFor={`${formId}-otp`}>{language === "en" ? "Verification code" : "验证码"}</label>
           <div className="gg-login-code-row">
           <input
+            id={`${formId}-otp`}
             aria-label={language === "en" ? "Verification code" : "验证码"}
             inputMode="numeric"
             autoComplete="one-time-code"
@@ -184,7 +205,7 @@ export function LoginForm({
             {sending ? (language === "en" ? "Sending…" : "发送中…") : countdown > 0 ? `${language === "en" ? "Resend in" : "重新发送"} ${countdown}s` : t.sendOtp}
           </button>
           </div></div>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="gg-form-message is-error" role="alert">{error}</p>}
       <p className="nm-login-consent">
         {brandText(t.consentPrefix, language)}{" "}
         <Link to="/terms-of-use" target="_blank" rel="noreferrer">

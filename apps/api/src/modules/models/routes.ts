@@ -5,7 +5,11 @@ import { prisma } from "../../lib/prisma.js";
 import { getTokingWallet, listTokingModels, readTokingConnection, TokingError, tokingHttpStatus, type TokingModel } from "../toking/client.js";
 
 export const modelRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/models", { preHandler: app.authenticateUser }, async (request, reply) => {
+  app.get("/models", { preHandler: app.optionalAuthenticateUser }, async (request, reply) => {
+    // Authenticated catalogs can include a customer's wallet models. Never cache
+    // that response across users, and expose only the public catalog to guests.
+    reply.header("Cache-Control", "private, no-store");
+    if (!request.user) return { models: await listGangramModels() };
     const user = await prisma.user.findUniqueOrThrow({ where: { id: request.user!.id } });
     try {
       const connection = readTokingConnection(user);

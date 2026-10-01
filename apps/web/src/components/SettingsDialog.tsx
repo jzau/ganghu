@@ -1,7 +1,7 @@
 import { PaymentsPanel, PaymentUsagePanel } from "./PaymentsPanel";
 import type { ApiUser } from "@ai-chat/shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, ChevronRight, Coins, FileText, Gift, Globe, LogOut, MessageSquare, ShieldCheck, UserRound, Wallet, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Coins, FileText, Gift, Globe, LogOut, MessageSquare, ShieldCheck, UserRound, Wallet, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../lib/api";
@@ -26,6 +26,14 @@ export function SettingsDialog({ language, onLanguageChange, user, initialSectio
   const t = labels[language];
   const [section, setSection] = useState<Section>(initialSection);
   const [mobilePanel, setMobilePanel] = useState(initialSection !== "profile");
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  async function logout() {
+    setLoggingOut(true); setLogoutError("");
+    try { await onLogout(); }
+    catch (error) { setLogoutError(localizeErrorMessage(error, language, language === "en" ? "Could not log out. Try again." : "退出登录失败，请重试。")); }
+    finally { setLoggingOut(false); }
+  }
   const dialog = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -56,18 +64,18 @@ export function SettingsDialog({ language, onLanguageChange, user, initialSectio
       <div className={`gg-settings ${mobilePanel ? "is-panel-open" : ""}`} role="dialog" aria-modal="true" aria-label={t.settings} tabIndex={-1} ref={dialog}>
         <nav className="gg-settings-nav" aria-label={t.settings}>
           <h1>{t.settings}</h1>
-          <button className="gg-settings-mobile-close nm-icon-button" onClick={onClose} aria-label={t.close}><X size={18} /></button>
+          <button className="gg-settings-mobile-close nm-icon-button" onClick={onClose} aria-label={t.close}><ChevronLeft size={20} /></button>
           <div className="gg-settings-nav-scroll">
             {groups.map((group) => <div className="gg-settings-group" key={group.name}>
               <p className="gg-eyebrow">{group.name}</p>
               {group.items.map(({ id, icon: Icon }) => <button key={id} aria-current={section === id ? "page" : undefined} className={`gg-settings-nav-item ${section === id ? "is-active" : ""}`} onClick={() => { setSection(id); setMobilePanel(true); }}><Icon size={16} /><span>{t[id]}</span><ChevronRight className="gg-settings-nav-chevron" size={14} /></button>)}
             </div>)}
-            <div className="gg-settings-group"><p className="gg-eyebrow">{t.management}</p><button className="gg-settings-nav-item is-danger" onClick={() => void onLogout()}><LogOut size={16} /><span>{t.logout}</span><ChevronRight className="gg-settings-nav-chevron" size={14} /></button></div>
+            <div className="gg-settings-group"><p className="gg-eyebrow">{t.management}</p><button className="gg-settings-nav-item is-danger" disabled={loggingOut} onClick={() => void logout()}><LogOut size={16} /><span>{t.logout}</span><ChevronRight className="gg-settings-nav-chevron" size={14} /></button>{logoutError && <p className="gg-form-message is-error" role="alert">{logoutError}</p>}</div>
           </div>
         </nav>
         <section className="gg-settings-pane">
           <header className="gg-settings-heading">
-            <button className="gg-settings-back nm-icon-button" onClick={() => setMobilePanel(false)} aria-label={t.settings}><ArrowLeft size={18} /></button>
+            <button className="gg-settings-back nm-icon-button" onClick={() => setMobilePanel(false)} aria-label={language === "en" ? "Back to settings list" : "返回设置列表"}><ChevronLeft size={20} /></button>
             <h2>{t[section]}</h2>
             <button className="nm-icon-button" onClick={onClose} aria-label={t.close}><X size={18} /></button>
           </header>
@@ -171,12 +179,15 @@ function ProfilePanel({ language, user, onAccountDeleted }: { language: Language
 
   return <>
     <p className="gg-eyebrow">{t.details}</p>
-    {(mode === "main" || mode === "phone" || mode === "delete") && <div className="gg-settings-card">
-      <div className="gg-profile-row"><div><p>{t.nickname}</p><strong>{user.displayName || t.unnamed}</strong></div><button className="gg-text-action" onClick={() => reset("name")}>{t.edit}</button></div>
-      <div className="gg-profile-row"><div><p>{t.phone}</p><strong className="gg-phone">{maskPhone(user.phoneNumber)}</strong></div><button className="gg-text-action" onClick={() => reset("phone")}>{t.change}</button></div>
+    <div className="gg-settings-card">
+      <div className="gg-profile-row"><div><p>{t.nickname}</p>{mode === "name" ? <form className="gg-profile-inline" onSubmit={saveName}>
+        <input aria-label={t.nickname} value={displayName} maxLength={60} autoFocus onChange={(event) => setDisplayName(event.target.value)} onKeyDown={(event) => {
+          if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); reset(); }
+        }} /><button className="gg-text-action" disabled={pending}>{t.save}</button>
+      </form> : <button className="gg-profile-name" aria-label={`${t.nickname}: ${user.displayName || t.unnamed}. ${t.edit}`} onClick={() => { setDisplayName(user.displayName ?? ""); reset("name"); }}>{user.displayName || t.unnamed}</button>}</div></div>
+      <div className="gg-profile-row"><div><p>{t.phone}</p><div className="gg-profile-inline"><strong className="gg-phone">{maskPhone(user.phoneNumber)}</strong><button className="gg-text-action" onClick={() => reset("phone")}>{t.change}</button></div></div></div>
       <div className="gg-profile-row"><div><strong>{t.deleteTitle}</strong><p>{t.deleteHint}</p></div><button className="gg-text-action is-danger" onClick={() => reset("delete")}>{t.delete}</button></div>
-    </div>}
-    {mode === "name" && <form className="gg-action-card" onSubmit={saveName}><label>{t.nickname}<input className="nm-field" value={displayName} maxLength={60} autoFocus onChange={(event) => setDisplayName(event.target.value)} /></label><div className="gg-form-actions"><Button type="button" variant="ghost" onClick={() => reset()}>{t.cancel}</Button><Button disabled={pending}>{t.save}</Button></div></form>}
+    </div>
     {mode === "phone" && <div className="gg-nested-backdrop"><form className="gg-nested-modal" onSubmit={submitPhone}><button type="button" className="gg-nested-close" onClick={() => reset()} aria-label="Close"><X size={16} /></button><h3>{phoneStep === "current" ? t.currentTitle : t.newTitle}</h3><p>{phoneStep === "current" ? `${t.currentHint} ${maskPhone(user.phoneNumber)}` : t.newHint}</p>{phoneStep === "new" && <div className="gg-phone-fields"><select className="nm-field" aria-label={t.newPhone} value={countryCode} onChange={(event) => { setCountryCode(event.target.value as CountryCode); setOtp(""); }}>{countryCodeOptions(language)}</select><input className="nm-field" aria-label={t.newPhone} inputMode="tel" value={phoneNumber} placeholder={country.hint} autoFocus onChange={(event) => { setPhoneNumber(event.target.value); setOtp(""); }} /></div>}<div className="gg-code-field"><input className="nm-field" aria-label={t.code} placeholder={t.code} inputMode="numeric" autoComplete="one-time-code" maxLength={12} value={otp} autoFocus={phoneStep === "current"} onChange={(event) => setOtp(event.target.value)} /><button type="button" disabled={pending} onClick={() => void requestPhoneOtp()}>{t.send}</button></div>{message && <p className="gg-form-message is-success" role="status">{message}</p>}{error && <p className="gg-form-message is-error" role="alert">{error}</p>}<Button className="gg-nested-primary" disabled={pending || otp.trim().length < 4}>{t.confirm}</Button></form></div>}
     {mode === "delete" && <div className="gg-nested-backdrop"><div className="gg-nested-modal"><button type="button" className="gg-nested-close" onClick={() => reset()} aria-label="Close"><X size={16} /></button><h3>{t.deleteConfirmTitle}</h3><p>{t.confirmHint}</p><label>{t.confirmLabel}<input className="nm-field" value={confirmation} autoFocus autoComplete="off" onChange={(event) => setConfirmation(event.target.value)} placeholder="delete my account" /></label><div className="gg-form-actions"><Button type="button" variant="ghost" onClick={() => reset()}>{t.cancel}</Button><Button type="button" className="gg-delete-button" disabled={pending || confirmation !== "delete my account"} onClick={() => void deleteAccount()}>{t.deleteConfirm}</Button></div></div></div>}
     {mode !== "phone" && message && <p className="gg-form-message is-success" role="status">{message}</p>}{mode !== "phone" && error && <p className="gg-form-message is-error" role="alert">{error}</p>}

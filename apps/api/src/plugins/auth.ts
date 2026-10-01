@@ -17,9 +17,9 @@ function readToken(request: FastifyRequest, cookieName: string) {
 }
 
 export const authPlugin = fp(async (app) => {
-  app.decorate("authenticateUser", async (request: FastifyRequest, reply: FastifyReply) => {
+  const identifyUser = async (request: FastifyRequest) => {
     const token = readToken(request, "user_session");
-    if (!token) return reply.code(401).send({ message: "Authentication required" });
+    if (!token) return;
 
     const session = await prisma.userSession.findUnique({
       where: { tokenHash: hashSecret(token) },
@@ -27,10 +27,16 @@ export const authPlugin = fp(async (app) => {
     });
 
     if (!session || session.expiresAt < new Date() || session.user.status !== "active") {
-      return reply.code(401).send({ message: "Authentication required" });
+      return;
     }
 
     request.user = { id: session.userId };
+  };
+
+  app.decorate("optionalAuthenticateUser", identifyUser);
+  app.decorate("authenticateUser", async (request: FastifyRequest, reply: FastifyReply) => {
+    await identifyUser(request);
+    if (!request.user) return reply.code(401).send({ message: "Authentication required" });
   });
 
   app.decorate("authenticateAdmin", async (request: FastifyRequest, reply: FastifyReply) => {
@@ -48,6 +54,7 @@ export const authPlugin = fp(async (app) => {
 
 declare module "fastify" {
   interface FastifyInstance {
+    optionalAuthenticateUser(request: FastifyRequest): Promise<void>;
     authenticateUser(request: FastifyRequest, reply: FastifyReply): Promise<void>;
     authenticateAdmin(request: FastifyRequest, reply: FastifyReply): Promise<void>;
   }
