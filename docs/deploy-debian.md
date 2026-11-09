@@ -1,5 +1,8 @@
 # Deploy to Debian
 
+For the existing multi-instance test server at `160.187.111.10`, use the
+server-specific [deployment runbook](./server-deployment-runbook.md) instead.
+
 This guide deploys the GANGHU AI app on a Debian server with:
 
 - PostgreSQL for the database
