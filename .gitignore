@@ -9,3 +9,6 @@ apps/api/dist
 
 # Local design reference; never ship or commit.
 /gangram-new-ui/
+
+# Local design comparison and verification artifacts.
+/artifacts/
