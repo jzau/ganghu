@@ -25,8 +25,8 @@ Updated 2026-09-08. The local `gangram-new-ui/` reference is ignored by Git. App
 
 - Replaced the small account popover with the reference's glass settings dialog: 800px maximum width, 248px navigation pane, section headings, profile detail cards and mobile section navigation.
 - Added Profile, Recharge, Redeem, Usage & Billing, Feedback, Terms, Privacy and Language navigation, plus logout.
-- Profile displays the actual account name and bound phone. Nickname editing uses the existing profile endpoint. Phone changes verify the new number through the same OTP service as login before replacing it. Account deletion requires typing `DELETE`, then permanently removes the local user, sessions, conversations, usage records, token ledger and redemptions.
-- **Backend changes required and implemented:** authenticated phone-change OTP request/verification endpoints and `DELETE /api/me` were added. When the external auth service is enabled, its existing OTP endpoints prove ownership of the new number.
+- Profile displays the actual account name and bound phone. Nickname editing uses the existing profile endpoint. Phone changes first verify the currently bound number and then verify the replacement number through the same OTP service as login. Account deletion requires typing `delete my account`, then permanently removes the local user, sessions, conversations, usage records, token ledger and redemptions.
+- **Backend changes required and implemented:** authenticated current-phone and new-phone OTP request/verification endpoints, short-lived signed change verification state, and `DELETE /api/me` were added. The new-phone endpoints reject direct calls until the current number has been verified. The shared auth service is unchanged; its existing OTP endpoints prove ownership of both numbers.
 - Account deletion affects only this service. The chatbot API deletes the user's server-side conversations, usage records, token ledger, redemptions, sessions and user row; it does not modify the shared auth service.
 - The auth service remains the OTP verifier. If the same phone number signs in later, successful OTP verification registers a fresh GANGRAM account with a new local user record, starting balance and no previous conversations.
 - Existing server-backed token redemption, language preference and logout actions remain connected.
@@ -52,8 +52,16 @@ Updated 2026-09-08. The local `gangram-new-ui/` reference is ignored by Git. App
 ### Dedicated login screen
 
 - Login now lives at `/login` instead of opening over the chat. Guest actions preserve the current path and return there after successful login.
-- The existing country list, validation, OTP request/verification endpoints, session cookie and legal consent text remain in use. An already signed-in user who visits `/login` is returned to the requested page.
-- **No new login backend behavior is required.** Production OTP continues through the configured auth service. Local development uses `000000` when that service is disabled; a separately configured `AUTH_TEST_OTP` is also accepted for controlled integration testing.
+- The login screen now matches the deployed demo's single-card journey: country, phone number, six-digit verification code and inline Send code action remain visible together, followed by the full-width Sign in button and product tagline.
+- The existing country list, validation, OTP request/verification endpoints and session cookie remain in use. An already signed-in user who visits `/login` is returned to the requested page. Local development uses `000000` when the auth service is disabled; a separately configured `AUTH_TEST_OTP` is also accepted for controlled integration testing.
+
+### Online-demo alignment audit
+
+- The deployed `gangram-new.vercel.app` demo is the visual standard when it differs from the ignored local reference folder.
+- Sidebar copy, positions and icon geometry; search overlay measurements; empty-conversation copy; composer placeholder; login layout; flat model selector; message copy controls, model attribution and reliability note were checked against the deployed demo and aligned.
+- Profile navigation now includes the reference chevrons and selected outline. Bound phone numbers are masked, and destructive confirmation uses the deployed demo's `delete my account` phrase in a nested dialog.
+- Current production behavior remains authoritative where demo fixtures describe unavailable systems: legal text does not claim provider-key connections or prepaid credits that the app does not support, and language choices remain limited to the two translations currently implemented.
+- Phone changes match the deployed two-screen flow: verify the masked current number, then enter and verify the replacement number. The signed current-number proof expires after ten minutes and becomes invalid when the bound phone changes.
 
 ### Feedback page
 
